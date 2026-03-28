@@ -1,5 +1,6 @@
 /**
  * Content Script - AI 请求拦截与自动操作
+ * 重构版：每次任务新建页面，完成后关闭页面
  */
 
 (function() {
@@ -9,7 +10,7 @@
   const CONFIG = {
     MAX_RETRIES: 5,
     TASK_TIMEOUT: 300000,
-    VIDEO_CHECK_INTERVAL: 3000,  // 增加检测间隔
+    VIDEO_CHECK_INTERVAL: 3000,
     PAGE_READY_WAIT: 3000
   };
 
@@ -20,13 +21,13 @@
   let timeoutTimer = null;
   let taskStartTime = null;
   let processedVideoUrls = new Set();
-  let taskSubmittedTime = null; // 任务提交时间
+  let taskSubmittedTime = null;
 
-  // ============ 视频URL缓存（拦截网络请求） ============
+  // ============ 视频URL缓存 ============
   window.__syaVideoUrls = [];
-  window.__syaCapturedResponses = []; // 存储捕获的完整响应
+  window.__syaCapturedResponses = [];
 
-  // ============ 工具函数 ============（必须最先定义）
+  // ============ 工具函数 ============
 
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -48,7 +49,6 @@
 
   // ============ 网络请求拦截 ============
 
-  // 拦截 fetch 请求
   const originalFetch = window.fetch;
   window.fetch = async function(...args) {
     const [url, options] = args;
@@ -57,7 +57,6 @@
     try {
       const response = await originalFetch(...args);
 
-      // 检查是否是视频相关的请求
       const contentType = response.headers.get('content-type') || '';
       const isVideo = urlStr.includes('.mp4') ||
                       urlStr.includes('.webm') ||
@@ -67,7 +66,6 @@
 
       if (isVideo) {
         log('🎯 拦截到视频请求:', urlStr);
-        log('   Content-Type:', contentType);
         window.__syaVideoUrls.push({
           url: urlStr,
           time: Date.now(),
@@ -75,20 +73,17 @@
         });
       }
 
-      // 检查 API 响应中的视频 URL
       if (contentType.includes('application/json')) {
         try {
           const clonedResponse = response.clone();
           const data = await clonedResponse.json();
 
-          // 存储响应用于调试
           window.__syaCapturedResponses.push({
             url: urlStr,
             data: data,
             time: Date.now()
           });
 
-          // 递归搜索视频 URL
           const videoUrls = extractVideoUrls(data);
           for (const vUrl of videoUrls) {
             log('🎥 从 API 响应中发现视频 URL:', vUrl);
@@ -99,16 +94,13 @@
             });
           }
 
-          // 保持缓存不超过30个
           if (window.__syaVideoUrls.length > 30) {
             window.__syaVideoUrls = window.__syaVideoUrls.slice(-30);
           }
           if (window.__syaCapturedResponses.length > 10) {
             window.__syaCapturedResponses = window.__syaCapturedResponses.slice(-10);
           }
-        } catch (e) {
-          // JSON 解析失败，忽略
-        }
+        } catch (e) {}
       }
 
       return response;
@@ -117,64 +109,11 @@
     }
   };
 
-  // 拦截 XMLHttpRequest
-  const originalXHR = window.XMLHttpRequest;
-  window.XMLHttpRequest = function() {
-    const xhr = new originalXHR();
-    const originalOpen = xhr.open;
-    const originalSend = xhr.send;
-
-    let requestUrl = '';
-
-    xhr.open = function(method, url, ...rest) {
-      requestUrl = typeof url === 'string' ? url : url.toString();
-      return originalOpen.call(xhr, method, url, ...rest);
-    };
-
-    xhr.send = function(...args) {
-      xhr.addEventListener('load', function() {
-        // 检查是否是视频相关请求
-        if (requestUrl.includes('.mp4') ||
-            requestUrl.includes('.webm') ||
-            requestUrl.includes('video')) {
-          log('🎯 XHR 拦截到视频请求:', requestUrl);
-          window.__syaVideoUrls.push({
-            url: requestUrl,
-            time: Date.now(),
-            type: 'xhr'
-          });
-        }
-
-        // 尝试解析 JSON 响应
-        try {
-          const contentType = xhr.getResponseHeader('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = JSON.parse(xhr.responseText);
-            const videoUrls = extractVideoUrls(data);
-            for (const vUrl of videoUrls) {
-              log('🎥 从 XHR 响应中发现视频 URL:', vUrl);
-              window.__syaVideoUrls.push({
-                url: vUrl,
-                time: Date.now(),
-                type: 'xhr-api'
-              });
-            }
-          }
-        } catch (e) {}
-      });
-
-      return originalSend.call(xhr, ...args);
-    };
-
-    return xhr;
-  };
-
-  // 递归提取 JSON 中的视频 URL
+  // 递归提取视频URL
   function extractVideoUrls(obj, urls = []) {
     if (!obj) return urls;
 
     if (typeof obj === 'string') {
-      // 扩展匹配模式
       if ((obj.includes('.mp4') || obj.includes('.webm') || obj.includes('video') || obj.includes('media'))
           && (obj.startsWith('http') || obj.startsWith('//') || obj.startsWith('/'))) {
         urls.push(obj);
@@ -201,6 +140,26 @@
   // ============ Grok 自动操作 ============
 
   const GrokOperator = {
+    // 将 base64 转换为 File 对象
+    base64ToFile: function(base64Data, filename) {
+      try {
+        const arr = base64Data.split(',');
+        const mimeMatch = arr[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new File([u8arr], filename, { type: mime });
+      } catch (e) {
+        log('base64 转换失败:', e);
+        return null;
+      }
+    },
+
+    // 等待元素出现
     waitForElement: function(selectors, timeout = 15000) {
       return new Promise((resolve, reject) => {
         const selectorList = Array.isArray(selectors) ? selectors : [selectors];
@@ -240,6 +199,7 @@
       });
     },
 
+    // 模拟输入
     simulateInput: function(element, text) {
       element.focus();
       element.click();
@@ -259,6 +219,7 @@
       });
     },
 
+    // 模拟点击 - 支持多种事件类型以适配不同UI框架
     simulateClick: async function(element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       await sleep(300);
@@ -267,6 +228,21 @@
       const x = rect.left + rect.width / 2;
       const y = rect.top + rect.height / 2;
 
+      // 先触发 pointer events（Radix UI 等现代组件库使用）
+      ['pointerdown', 'pointerup'].forEach(eventType => {
+        element.dispatchEvent(new PointerEvent(eventType, {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          pointerType: 'mouse',
+          isPrimary: true
+        }));
+      });
+
+      await sleep(100);
+
+      // 再触发 mouse events
       ['mousedown', 'mouseup', 'click'].forEach(eventType => {
         element.dispatchEvent(new MouseEvent(eventType, {
           bubbles: true,
@@ -275,71 +251,610 @@
           clientY: y
         }));
       });
+
+      await sleep(100);
+
+      // 最后触发 focus
+      element.focus?.();
     },
 
+    // 通过background下载图片并返回blob URL
+    downloadImageViaBackground: async function(base64Data, index) {
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          action: 'DOWNLOAD_IMAGE',
+          imageData: base64Data,
+          index: index
+        }, (response) => {
+          if (response && response.success) {
+            log('图片已下载到临时文件:', response.filePath);
+            resolve(response.filePath);
+          } else {
+            log('图片下载失败:', response?.error);
+            resolve(null);
+          }
+        });
+      });
+    },
+
+    // 上传图片 - 只使用精确选择器
+    uploadImages: async function(images) {
+      if (!images || images.length === 0) {
+        log('没有图片需要上传');
+        return true;
+      }
+
+      // 限制最多5张
+      const maxImages = 5;
+      const imagesToUpload = images.slice(0, maxImages);
+      if (images.length > maxImages) {
+        log(`⚠️ 图片数量超过${maxImages}张，只上传前${maxImages}张`);
+      }
+
+      log('📸 开始上传图片，数量:', imagesToUpload.length);
+      updateStatus('上传参考图片...');
+
+      // 精确查找上传按钮：aria-label="Upload"
+      const uploadBtn = document.querySelector('button[aria-label="Upload"]');
+      if (!uploadBtn) {
+        log('⚠️ 未找到上传按钮 button[aria-label="Upload"]');
+        return false;
+      }
+
+      log('找到上传按钮，准备点击');
+      await this.simulateClick(uploadBtn);
+      await sleep(1000);
+
+      // 查找文件输入框
+      const fileInput = document.querySelector('input[type="file"]');
+      if (!fileInput) {
+        log('⚠️ 未找到文件输入框');
+        return false;
+      }
+
+      // 将所有图片转换为 File 对象
+      const files = [];
+      for (let i = 0; i < imagesToUpload.length; i++) {
+        const base64Data = imagesToUpload[i];
+        const file = this.base64ToFile(base64Data, `image_${i}.png`);
+        if (file) {
+          files.push(file);
+          log('准备图片:', file.name, '大小:', file.size);
+        }
+      }
+
+      if (files.length === 0) {
+        log('⚠️ 没有有效的图片文件');
+        return false;
+      }
+
+      // 一次性设置所有文件到 DataTransfer
+      const dataTransfer = new DataTransfer();
+      for (const file of files) {
+        dataTransfer.items.add(file);
+      }
+      fileInput.files = dataTransfer.files;
+
+      log(`📤 一次性上传 ${files.length} 张图片`);
+
+      // 触发事件
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      log('✅ 图片上传事件已触发');
+      await sleep(2000);
+
+      updateStatus('图片上传完成');
+      return true;
+    },
+
+    // 设置参数（分辨率、时长、画面比例）- 通过点击UI按钮
+    setParameters: async function(params) {
+      if (!params) return;
+
+      log('设置参数:', params);
+
+      // 画面比例
+      if (params.aspect_ratio) {
+        await this.setAspectRatio(params.aspect_ratio);
+        await sleep(300);
+      }
+
+      // 分辨率
+      if (params.resolution) {
+        await this.setResolution(params.resolution);
+        await sleep(300);
+      }
+
+      // 时长
+      if (params.duration) {
+        await this.setDuration(params.duration);
+        await sleep(300);
+      }
+    },
+
+    // 检查并修复参数设置 - 提交前的最终确认
+    verifyAndFixParameters: async function(params) {
+      log('🔍 最终检查参数设置...');
+
+      let needsFix = false;
+
+      // 1. 检查视频模式
+      const modeGroup = document.querySelector('div[aria-label="生成模式"][role="radiogroup"]');
+      if (modeGroup) {
+        const radioButtons = modeGroup.querySelectorAll('button[role="radio"]');
+        let videoModeActive = false;
+        for (const btn of radioButtons) {
+          const text = btn.textContent || '';
+          if (text.includes('视频') && btn.getAttribute('aria-checked') === 'true') {
+            videoModeActive = true;
+            break;
+          }
+        }
+        if (!videoModeActive) {
+          log('⚠️ 视频模式未激活，需要重新设置');
+          needsFix = true;
+        } else {
+          log('✅ 视频模式已激活');
+        }
+      }
+
+      // 2. 检查分辨率
+      if (params.resolution) {
+        const resGroup = document.querySelector('div[aria-label="视频分辨率"][role="radiogroup"]');
+        if (resGroup) {
+          const targetText = params.resolution.toLowerCase();
+          const radioButtons = resGroup.querySelectorAll('button[role="radio"]');
+          let resCorrect = false;
+          for (const btn of radioButtons) {
+            const text = (btn.textContent || '').toLowerCase();
+            if (text.includes(targetText.replace('p', '')) && btn.getAttribute('aria-checked') === 'true') {
+              resCorrect = true;
+              break;
+            }
+          }
+          if (!resCorrect) {
+            log('⚠️ 分辨率未正确设置，需要重新设置');
+            needsFix = true;
+          } else {
+            log('✅ 分辨率设置正确:', params.resolution);
+          }
+        }
+      }
+
+      // 3. 检查时长
+      if (params.duration) {
+        const durationGroup = document.querySelector('div[aria-label="视频持续时间"][role="radiogroup"]');
+        if (durationGroup) {
+          const targetText = params.duration + 's';
+          const radioButtons = durationGroup.querySelectorAll('button[role="radio"]');
+          let durationCorrect = false;
+          for (const btn of radioButtons) {
+            const text = btn.textContent || '';
+            if (text.includes(targetText) && btn.getAttribute('aria-checked') === 'true') {
+              durationCorrect = true;
+              break;
+            }
+          }
+          if (!durationCorrect) {
+            log('⚠️ 时长未正确设置，需要重新设置');
+            needsFix = true;
+          } else {
+            log('✅ 时长设置正确:', params.duration + 's');
+          }
+        }
+      }
+
+      // 4. 检查画面比例
+      if (params.aspect_ratio) {
+        const aspectBtn = document.querySelector('button[aria-label="宽高比"]');
+        if (aspectBtn) {
+          const currentText = aspectBtn.textContent || '';
+          if (!currentText.includes(params.aspect_ratio)) {
+            log('⚠️ 画面比例未正确设置，需要重新设置');
+            needsFix = true;
+          } else {
+            log('✅ 画面比例设置正确:', params.aspect_ratio);
+          }
+        }
+      }
+
+      // 如果有参数不正确，重新设置所有参数
+      if (needsFix) {
+        log('🔧 发现参数不一致，重新设置所有参数...');
+        await this.switchToVideoMode();
+        await sleep(500);
+        await this.setParameters(params);
+        await sleep(500);
+        log('✅ 参数重新设置完成');
+      } else {
+        log('✅ 所有参数检查通过');
+      }
+
+      return !needsFix;
+    },
+
+    // 切换到视频模式（从图像模式切换）
+    switchToVideoMode: async function() {
+      log('尝试切换到视频模式...');
+
+      // 精确选择器：aria-label="生成模式" 的 radiogroup
+      const modeGroup = document.querySelector('div[aria-label="生成模式"][role="radiogroup"]');
+      if (!modeGroup) {
+        log('⚠️ 未找到生成模式切换组');
+        return false;
+      }
+
+      // 查找包含"视频"文字的 radio 按钮
+      const radioButtons = modeGroup.querySelectorAll('button[role="radio"]');
+      for (const btn of radioButtons) {
+        const text = btn.textContent || '';
+        log('模式按钮:', text, 'aria-checked:', btn.getAttribute('aria-checked'));
+
+        if (text.includes('视频')) {
+          const isChecked = btn.getAttribute('aria-checked') === 'true';
+          if (!isChecked) {
+            log('点击切换到视频模式');
+            await this.simulateClick(btn);
+            await sleep(1000);
+            return true;
+          } else {
+            log('✅ 视频模式已激活');
+            return true;
+          }
+        }
+      }
+
+      log('⚠️ 未找到视频模式按钮');
+      return false;
+    },
+
+    // 设置时长
+    setDuration: async function(duration) {
+      log('设置时长:', duration);
+
+      // 精确选择器：aria-label="视频持续时间" 的 radiogroup
+      const durationGroup = document.querySelector('div[aria-label="视频持续时间"][role="radiogroup"]');
+      if (!durationGroup) {
+        log('⚠️ 未找到时长切换组');
+        return false;
+      }
+
+      // 将数字转换为显示文本，例如 6 -> "6s", 10 -> "10s"
+      const targetText = duration + 's';
+
+      const radioButtons = durationGroup.querySelectorAll('button[role="radio"]');
+      for (const btn of radioButtons) {
+        const text = btn.textContent || '';
+        log('时长按钮:', text, 'aria-checked:', btn.getAttribute('aria-checked'));
+
+        if (text.includes(targetText)) {
+          const isChecked = btn.getAttribute('aria-checked') === 'true';
+          if (!isChecked) {
+            log('点击设置时长:', targetText);
+            await this.simulateClick(btn);
+            await sleep(500);
+            return true;
+          } else {
+            log('✅ 时长已设置为:', targetText);
+            return true;
+          }
+        }
+      }
+
+      log('⚠️ 未找到时长按钮:', targetText);
+      return false;
+    },
+
+    // 设置画面比例
+    setAspectRatio: async function(ratio) {
+      log('🎯 设置画面比例:', ratio);
+      updateStatus('设置画面比例: ' + ratio);
+
+      // 查找宽高比按钮 - 使用多种选择器尝试
+      const selectors = [
+        'button[aria-label="宽高比"]',
+        'button[aria-label="Aspect ratio"]',
+        'button[aria-label*="ratio"]',
+        'button[aria-label*="比例"]'
+      ];
+
+      let aspectBtn = null;
+      for (const selector of selectors) {
+        aspectBtn = document.querySelector(selector);
+        if (aspectBtn) {
+          log('找到宽高比按钮，选择器:', selector);
+          break;
+        }
+      }
+
+      if (!aspectBtn) {
+        log('⚠️ 未找到宽高比按钮，尝试遍历所有按钮');
+        const allButtons = document.querySelectorAll('button');
+        for (const btn of allButtons) {
+          const text = btn.textContent || '';
+          const ariaLabel = btn.getAttribute('aria-label') || '';
+          if (text.includes(':') && (text.includes('16:9') || text.includes('9:16') || text.includes('1:1') || text.includes('2:3') || text.includes('3:2'))) {
+            if (ariaLabel.includes('宽高比') || ariaLabel.includes('ratio') || ariaLabel.includes('比例')) {
+              aspectBtn = btn;
+              log('通过遍历找到宽高比按钮:', ariaLabel, '文本:', text);
+              break;
+            }
+          }
+        }
+      }
+
+      if (!aspectBtn) {
+        log('⚠️ 未找到宽高比按钮');
+        return false;
+      }
+
+      // 检查当前值 - 从 span 中获取
+      const spanEl = aspectBtn.querySelector('span');
+      const currentText = spanEl ? spanEl.textContent.trim() : (aspectBtn.textContent || '').trim();
+      log('当前宽高比显示:', currentText);
+
+      // 如果已经是目标值，直接返回
+      if (currentText === ratio || currentText.includes(ratio)) {
+        log('✅ 画面比例已正确:', ratio);
+        return true;
+      }
+
+      log('📍 准备点击宽高比按钮，当前值:', currentText, '目标值:', ratio);
+
+      // 点击打开下拉菜单
+      await this.simulateClick(aspectBtn);
+      log('已点击按钮，等待菜单打开...');
+      await sleep(800);
+
+      // 通过 aria-controls 找到菜单ID
+      const menuId = aspectBtn.getAttribute('aria-controls');
+      log('aria-controls 属性:', menuId);
+
+      let menu = null;
+      if (menuId) {
+        menu = document.getElementById(menuId);
+        if (menu) {
+          log('通过 ID 找到菜单:', menuId);
+        }
+      }
+
+      // 如果没找到，尝试其他选择器
+      if (!menu) {
+        log('尝试其他菜单选择器...');
+        const menuSelectors = [
+          '[role="menu"][data-state="open"]',
+          '[role="listbox"][data-state="open"]',
+          '[role="menu"]',
+          '[role="listbox"]',
+          'div[data-state="open"]'
+        ];
+        for (const sel of menuSelectors) {
+          menu = document.querySelector(sel);
+          if (menu) {
+            log('通过选择器找到菜单:', sel);
+            break;
+          }
+        }
+      }
+
+      // 如果还是没找到，查找最近出现的弹出层
+      if (!menu) {
+        log('尝试查找弹出层...');
+        const popovers = document.querySelectorAll('[role="dialog"], [data-radix-popper-content-wrapper], div[class*="popover"], div[class*="dropdown"]');
+        for (const pop of popovers) {
+          if (pop.offsetParent !== null) {
+            const items = pop.querySelectorAll('button, [role="menuitem"], [role="option"]');
+            if (items.length > 0) {
+              menu = pop;
+              log('找到弹出层，包含选项数量:', items.length);
+              break;
+            }
+          }
+        }
+      }
+
+      if (!menu) {
+        log('⚠️ 未找到下拉菜单，可能点击未生效');
+        // 再次点击尝试
+        await this.simulateClick(aspectBtn);
+        await sleep(800);
+
+        // 再次查找
+        if (menuId) {
+          menu = document.getElementById(menuId);
+        }
+        if (!menu) {
+          menu = document.querySelector('[role="menu"][data-state="open"]') ||
+                  document.querySelector('[role="listbox"][data-state="open"]');
+        }
+
+        if (!menu) {
+          log('⚠️ 再次尝试仍未找到菜单');
+          document.body.click();
+          return false;
+        }
+      }
+
+      log('找到菜单容器:', menu.id || menu.className || menu.tagName);
+
+      // 在菜单中查找选项
+      const items = menu.querySelectorAll('[role="menuitem"], [role="option"], button, div[role="menuitemradio"]');
+      log('菜单选项数量:', items.length);
+
+      let foundAndClicked = false;
+      for (const item of items) {
+        const text = (item.textContent || '').trim();
+        const ariaLabel = item.getAttribute('aria-label') || '';
+        log('选项:', text, 'aria-label:', ariaLabel);
+
+        // 匹配目标比例
+        if (text === ratio || text.includes(ratio) || ariaLabel.includes(ratio)) {
+          log('🎯 找到目标选项:', text, '准备点击');
+          await this.simulateClick(item);
+          await sleep(500);
+          foundAndClicked = true;
+          break;
+        }
+      }
+
+      if (!foundAndClicked) {
+        log('⚠️ 未找到匹配的比例选项:', ratio);
+        // 关闭菜单
+        document.body.click();
+        await sleep(300);
+        return false;
+      }
+
+      // 验证设置结果
+      await sleep(300);
+      const newSpanEl = aspectBtn.querySelector('span');
+      const newText = newSpanEl ? newSpanEl.textContent.trim() : (aspectBtn.textContent || '').trim();
+      log('设置后的宽高比:', newText);
+
+      if (newText === ratio || newText.includes(ratio)) {
+        log('✅ 画面比例设置成功:', ratio);
+        updateStatus('画面比例设置完成');
+        return true;
+      } else {
+        log('⚠️ 设置可能未生效，当前显示:', newText);
+        return false;
+      }
+    },
+
+    // 设置分辨率
+    setResolution: async function(resolution) {
+      log('设置分辨率:', resolution);
+
+      // 精确选择器：aria-label="视频分辨率" 的 radiogroup
+      const resGroup = document.querySelector('div[aria-label="视频分辨率"][role="radiogroup"]');
+      if (!resGroup) {
+        log('⚠️ 未找到分辨率切换组');
+        return false;
+      }
+
+      // 目标文本映射
+      const targetText = resolution.toLowerCase().includes('480') ? '480p' :
+                         resolution.toLowerCase().includes('720') ? '720p' :
+                         resolution.toLowerCase().includes('1080') ? '1080p' : resolution;
+
+      const radioButtons = resGroup.querySelectorAll('button[role="radio"]');
+      for (const btn of radioButtons) {
+        const text = btn.textContent || '';
+        log('分辨率按钮:', text, 'aria-checked:', btn.getAttribute('aria-checked'));
+
+        if (text.includes(targetText)) {
+          const isChecked = btn.getAttribute('aria-checked') === 'true';
+          if (!isChecked) {
+            log('点击设置分辨率:', targetText);
+            await this.simulateClick(btn);
+            await sleep(500);
+            return true;
+          } else {
+            log('✅ 分辨率已设置为:', targetText);
+            return true;
+          }
+        }
+      }
+
+      log('⚠️ 未找到分辨率按钮:', targetText);
+      return false;
+    },
+
+    // 等待提交按钮可用
+    waitForSubmitButtonReady: async function(timeout = 30000) {
+      log('等待提交按钮变为可用状态...');
+
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < timeout) {
+        // 查找可能的提交按钮
+        const buttons = document.querySelectorAll('button[type="submit"], button[aria-label*="Send"], button[aria-label*="Generate"], button[aria-label*="发送"], button[aria-label*="生成"]');
+
+        for (const btn of buttons) {
+          // 检查按钮是否可用（非禁用状态）
+          if (!btn.disabled && btn.offsetParent !== null) {
+            log('找到可用的提交按钮:', btn.getAttribute('aria-label') || btn.textContent);
+            return btn;
+          }
+        }
+
+        // 也检查输入框附近的按钮
+        const inputBox = document.querySelector('textarea, div[contenteditable="true"], div.ProseMirror');
+        if (inputBox) {
+          const container = inputBox.closest('div[class*="container"], div[class*="wrapper"], form, div');
+          if (container) {
+            const nearbyButtons = container.querySelectorAll('button');
+            for (const btn of nearbyButtons) {
+              if (!btn.disabled && btn.offsetParent !== null) {
+                const ariaLabel = btn.getAttribute('aria-label') || '';
+                const btnText = btn.textContent || '';
+                // 排除非提交按钮
+                const excludeKeywords = ['attach', 'emoji', 'file', 'upload', '附件', '表情', '文件', '上传'];
+                if (!excludeKeywords.some(kw => ariaLabel.toLowerCase().includes(kw) || btnText.toLowerCase().includes(kw))) {
+                  log('找到附近可用的按钮:', ariaLabel || btnText);
+                  return btn;
+                }
+              }
+            }
+          }
+        }
+
+        log('按钮仍不可用，等待中...');
+        await sleep(1000);
+      }
+
+      log('⚠️ 等待按钮超时');
+      return null;
+    },
+
+    // 查找并点击提交按钮
     findAndClickSubmit: async function() {
-      // Grok 特定的按钮选择器（按优先级排序）
       const buttonSelectors = [
-        // Grok 发送按钮
         'button[aria-label*="Send"]',
         'button[aria-label*="Generate"]',
         'button[aria-label*="Submit"]',
         'button[aria-label*="发送"]',
+        'button[aria-label*="生成"]',
         'button[data-testid*="send"]',
         'button[data-testid*="submit"]',
-        // 带特定 class 的按钮
-        'button.send-button',
-        'button.submit-button',
-        'button.primary-button',
-        // 表单提交按钮
-        'button[type="submit"]',
-        // 最后尝试：找到输入框附近的按钮
+        'button[type="submit"]'
       ];
 
-      // 先尝试精确匹配
       for (const selector of buttonSelectors) {
         try {
           const buttons = document.querySelectorAll(selector);
           for (const btn of buttons) {
             if (btn && !btn.disabled && btn.offsetParent !== null) {
-              log('找到精确匹配按钮:', selector, btn);
+              log('找到提交按钮:', selector);
               await this.simulateClick(btn);
               await sleep(500);
-              // 检查是否有反应（输入框是否清空或页面是否有变化）
               return true;
             }
           }
-        } catch (e) {
-          log('选择器错误:', selector, e);
-        }
+        } catch (e) {}
       }
 
-      // 如果精确匹配失败，尝试查找输入框附近的按钮
-      log('精确匹配失败，尝试查找输入框附近的按钮');
+      // 尝试查找输入框附近的按钮
       const inputBox = document.querySelector('textarea, div[contenteditable="true"], div.ProseMirror');
       if (inputBox) {
-        // 查找输入框父容器中的按钮
         const container = inputBox.closest('div[class*="container"], div[class*="wrapper"], form, div');
         if (container) {
           const buttons = container.querySelectorAll('button:not([disabled])');
           for (const btn of buttons) {
-            // 检查按钮是否在输入框右侧或下方（发送按钮通常在这里）
             const inputRect = inputBox.getBoundingClientRect();
             const btnRect = btn.getBoundingClientRect();
 
-            // 按钮应该在输入框右侧或下方附近
             const isRightSide = btnRect.left >= inputRect.right - 100;
-            const isBelow = btnRect.top >= inputRect.bottom - 50 && btnRect.top <= inputRect.bottom + 100;
             const isSameRow = Math.abs(btnRect.top - inputRect.top) < 50;
 
-            if ((isRightSide && isSameRow) || isBelow) {
-              // 排除一些明显的非发送按钮（如附件、表情等）
+            if (isRightSide && isSameRow) {
               const ariaLabel = btn.getAttribute('aria-label') || '';
               const btnText = btn.textContent || '';
               const excludeKeywords = ['attach', 'emoji', 'image', 'file', 'upload', '附件', '表情', '图片', '文件', '上传'];
 
               if (!excludeKeywords.some(kw => ariaLabel.toLowerCase().includes(kw) || btnText.toLowerCase().includes(kw))) {
-                log('找到输入框附近的按钮:', btn, 'aria-label:', ariaLabel);
+                log('找到输入框附近的按钮:', ariaLabel);
                 await this.simulateClick(btn);
                 return true;
               }
@@ -348,65 +863,42 @@
         }
       }
 
-      // 最后尝试：任何可点击的按钮
-      log('尝试查找任何可点击的按钮');
-      const allButtons = document.querySelectorAll('button:not([disabled])');
-      for (const btn of allButtons) {
-        if (btn.offsetParent !== null) {
-          const rect = btn.getBoundingClientRect();
-          // 按钮应该在可见区域
-          if (rect.top > 0 && rect.top < window.innerHeight) {
-            const ariaLabel = btn.getAttribute('aria-label') || '';
-            log('候选按钮:', btn, 'aria-label:', ariaLabel, 'rect:', rect);
-          }
-        }
-      }
-
       return false;
     },
 
+    // 执行任务
     executeTask: async function(task) {
       if (isExecuting) {
         log('已有任务在执行中');
         return { success: false, error: '已有任务在执行中' };
       }
 
-      // 清理上一次任务的状态
+      // 清理状态
       if (videoCheckTimer) clearInterval(videoCheckTimer);
       if (timeoutTimer) clearTimeout(timeoutTimer);
       if (window._syaObserver) window._syaObserver.disconnect();
 
-      // 清理视频缓存和状态
       window.__syaVideoUrls = [];
       window.__syaCapturedResponses = [];
       processedVideoUrls = new Set();
       taskStartTime = Date.now();
-      log('🚀 任务开始时间:', taskStartTime);
-
-      // 记录页面上已存在的视频，避免误判为新生成的
-      const existingVideos = document.querySelectorAll('video[src], source[src], a[href*=".mp4"]');
-      for (const v of existingVideos) {
-        const src = v.src || v.href;
-        if (src) {
-          processedVideoUrls.add(src);
-          log('📝 记录已存在的视频:', src);
-        }
-      }
 
       isExecuting = true;
       currentTask = task;
-      log('开始执行任务:', task.task_id);
+      log('🚀 开始执行任务:', task.task_id, 'params:', task.params);
 
       try {
         updateStatus('等待页面加载...');
         await sleep(CONFIG.PAGE_READY_WAIT);
 
+        // 查找输入框
         updateStatus('查找输入框...');
 
         const inputSelectors = [
           'textarea[placeholder*="message"]',
           'textarea[placeholder*="Ask"]',
           'textarea[placeholder*="Describe"]',
+          'textarea[placeholder*="想象"]',
           'div[contenteditable="true"]',
           'div.ProseMirror',
           'textarea:not([disabled])'
@@ -417,15 +909,69 @@
           inputBox = await this.waitForElement(inputSelectors, 15000);
         } catch (e) {
           updateStatus('未找到输入框');
-          throw new Error('无法找到输入框');
+          isExecuting = false;
+          return { success: false, error: '无法找到输入框' };
         }
 
-        log('找到输入框');
-        updateStatus('填写提示词...');
+        log('找到输入框:', inputBox.tagName, inputBox.placeholder || inputBox.contentEditable);
 
+        // 0. 根据model_id切换模式（视频/图像）
+        if (task.model_id && task.model_id.includes('video')) {
+          updateStatus('切换到视频模式...');
+          await this.switchToVideoMode();
+          await sleep(500);
+        }
+
+        // 1. 先填写提示词
+        updateStatus('填写提示词...');
+        log('原始提示词:', task.prompt);
         this.simulateInput(inputBox, task.prompt);
         await sleep(500);
 
+        // 验证提示词是否填入成功
+        let inputContent = '';
+        if (inputBox.isContentEditable || inputBox.contentEditable === 'true') {
+          inputContent = inputBox.innerText || inputBox.textContent || '';
+        } else {
+          inputContent = inputBox.value || '';
+        }
+        log('输入框内容:', inputContent.substring(0, 100));
+
+        if (!inputContent || inputContent.length < 5) {
+          log('⚠️ 提示词可能未正确填入，尝试重新填写');
+          this.simulateInput(inputBox, task.prompt);
+          await sleep(500);
+        }
+
+        // 2. 设置参数（分辨率、时长、画面比例）
+        updateStatus('设置参数...');
+        await this.setParameters(task.params);
+        await sleep(500);
+
+        // 3. 最后上传图片（如果有）- 放在填写提示词之后
+        if (task.images && task.images.length > 0) {
+          updateStatus('上传图片...');
+          await this.uploadImages(task.images);
+
+          // 等待图片处理完成，提交按钮变为可用
+          updateStatus('等待图片处理...');
+          await sleep(2000);
+
+          // 等待提交按钮可用
+          const readyBtn = await this.waitForSubmitButtonReady(30000);
+          if (readyBtn) {
+            log('提交按钮已就绪');
+          } else {
+            log('⚠️ 提交按钮可能仍处于禁用状态');
+          }
+        }
+
+        // 4. 最终检查参数设置（确保所有设置正确）
+        updateStatus('检查参数设置...');
+        await this.verifyAndFixParameters(task.params);
+        await sleep(500);
+
+        // 5. 提交任务
         updateStatus('提交任务...');
 
         const clicked = await this.findAndClickSubmit();
@@ -437,14 +983,25 @@
           }));
         }
 
-        // 记录任务提交时间
         taskSubmittedTime = Date.now();
         log('📤 任务已提交，时间:', taskSubmittedTime);
 
         updateStatus('任务已提交，等待视频生成...');
 
-        // 等待一段时间后再开始监控，避免检测到旧视频
-        await sleep(5000);
+        // 等待更长时间后再开始监控，避免检测到示例视频
+        await sleep(15000);
+
+        // 重新扫描并记录页面上当前所有视频（包括示例视频）
+        log('📊 扫描页面上已存在的视频...');
+        const existingVideos = document.querySelectorAll('video[src], video source[src], a[href*=".mp4"]');
+        for (const v of existingVideos) {
+          const src = v.src || v.href || v.getAttribute('src') || v.closest('video')?.src;
+          if (src && !processedVideoUrls.has(src)) {
+            processedVideoUrls.add(src);
+            log('📝 记录已存在的视频:', src);
+          }
+        }
+        log('已记录的视频数量:', processedVideoUrls.size);
 
         startVideoMonitoring(task.task_id);
 
@@ -477,7 +1034,6 @@
       checkForVideo(taskId);
     }, CONFIG.VIDEO_CHECK_INTERVAL);
 
-    // 同时监控 DOM 变化
     const observer = new MutationObserver(() => {
       checkForVideo(taskId);
     });
@@ -486,9 +1042,7 @@
   }
 
   function checkForVideo(taskId) {
-    // 先检查拦截到的视频 URL
     if (window.__syaVideoUrls && window.__syaVideoUrls.length > 0) {
-      // 过滤出任务提交后捕获的 URL
       const recentUrls = window.__syaVideoUrls.filter(u => {
         const urlObj = typeof u === 'object' ? u : { url: u, time: 0 };
         return urlObj.time > (taskSubmittedTime || 0);
@@ -506,24 +1060,18 @@
       }
     }
 
-    // 检查页面上的 video 元素
-    const videoSelectors = [
-      'video[src]',
-      'video source[src]',
-      'a[href*=".mp4"]'
-    ];
+    const videoSelectors = ['video[src]', 'video source[src]', 'a[href*=".mp4"]'];
 
     for (const selector of videoSelectors) {
       const elements = document.querySelectorAll(selector);
       for (const el of elements) {
         const src = el.src || el.href || el.getAttribute('src');
         if (src && !processedVideoUrls.has(src)) {
-          // 对于 video 元素，检查是否已加载
           if (el.tagName === 'VIDEO' || el.tagName === 'SOURCE') {
             const video = el.tagName === 'VIDEO' ? el : el.closest('video');
             if (video && video.readyState >= 2) {
               processedVideoUrls.add(src);
-              log('🎬 检测到已加载视频:', src, 'readyState:', video.readyState);
+              log('🎬 检测到已加载视频:', src);
               handleVideoFound(taskId, src, video);
               return;
             }
@@ -539,7 +1087,6 @@
   }
 
   async function handleVideoFound(taskId, videoUrl, videoElement) {
-    // 停止监控
     if (videoCheckTimer) clearInterval(videoCheckTimer);
     if (timeoutTimer) clearTimeout(timeoutTimer);
     if (window._syaObserver) window._syaObserver.disconnect();
@@ -549,9 +1096,8 @@
 
     let blob = null;
 
-    // 1. 优先使用拦截到的真实视频 URL
+    // 尝试下载
     if (window.__syaVideoUrls && window.__syaVideoUrls.length > 0) {
-      // 过滤出任务提交后的 URL，按时间排序
       const candidateUrls = window.__syaVideoUrls
         .filter(u => {
           const urlObj = typeof u === 'object' ? u : { url: u, time: Date.now() };
@@ -559,20 +1105,13 @@
         })
         .map(u => typeof u === 'object' ? u.url : u);
 
-      log('📋 候选视频 URL 列表:', candidateUrls);
-
       for (const url of candidateUrls) {
         if (url && !url.startsWith('blob:')) {
           try {
-            log('尝试下载:', url);
-            const response = await fetch(url, {
-              mode: 'cors',
-              credentials: 'include'
-            });
+            const response = await fetch(url, { mode: 'cors', credentials: 'include' });
             if (response.ok) {
               blob = await response.blob();
-              log('✅ 下载成功，大小:', blob.size, '类型:', blob.type);
-              if (blob.size > 10000) break; // 至少 10KB
+              if (blob.size > 10000) break;
               blob = null;
             }
           } catch (e) {
@@ -582,57 +1121,23 @@
       }
     }
 
-    // 2. 如果是普通 URL，直接下载
     if (!blob && videoUrl && !videoUrl.startsWith('blob:')) {
       try {
-        log('直接下载视频 URL:', videoUrl);
-        const response = await fetch(videoUrl, {
-          mode: 'cors',
-          credentials: 'include'
-        });
+        const response = await fetch(videoUrl, { mode: 'cors', credentials: 'include' });
         blob = await response.blob();
-        log('✅ 直接下载成功，大小:', blob.size);
-      } catch (e) {
-        log('❌ 直接下载失败:', e.message);
-      }
+      } catch (e) {}
     }
 
-    // 3. 如果是 blob URL，尝试特殊处理
     if (!blob && videoUrl && videoUrl.startsWith('blob:')) {
-      log('检测到 blob URL，尝试特殊处理...');
-
-      // 尝试直接 fetch blob（有时可行）
       try {
         const response = await fetch(videoUrl);
         blob = await response.blob();
-        log('✅ blob fetch 成功，大小:', blob.size);
-      } catch (e) {
-        log('❌ blob fetch 失败:', e.message);
-      }
-
-      // 如果失败，查找下载按钮
-      if (!blob || blob.size < 10000) {
-        blob = await findAndClickDownloadButton(taskId);
-      }
-    }
-
-    // 4. 最后尝试：从页面找下载按钮
-    if (!blob || blob.size < 10000) {
-      log('尝试从页面找下载按钮...');
-      blob = await findAndClickDownloadButton(taskId);
+      } catch (e) {}
     }
 
     if (!blob || blob.size < 10000) {
-      log('❌ 所有下载方式都失败');
       updateStatus('视频下载失败');
-
-      // 打印调试信息
-      log('=== 调试信息 ===');
-      log('拦截到的 URL:', window.__syaVideoUrls);
-      log('捕获的响应:', window.__syaCapturedResponses);
-      log('当前 videoUrl:', videoUrl);
-
-      handleTaskFailed(taskId, '视频下载失败，请重试');
+      handleTaskFailed(taskId, '视频下载失败');
       return;
     }
 
@@ -642,14 +1147,8 @@
 
       const reader = new FileReader();
       const base64Promise = new Promise((resolve) => {
-        reader.onloadend = () => {
-          log('base64 转换完成，长度:', reader.result?.length);
-          resolve(reader.result);
-        };
-        reader.onerror = () => {
-          log('base64 转换失败');
-          resolve(null);
-        };
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
         reader.readAsDataURL(blob);
       });
       const base64Data = await base64Promise;
@@ -664,8 +1163,6 @@
         videoData: base64Data,
         fileSize: blob.size
       });
-
-      log('上传结果:', result);
 
       if (!result?.success) {
         throw new Error(result?.error || '上传失败');
@@ -686,53 +1183,16 @@
       updateStatus('上传完成！');
       isExecuting = false;
 
+      // 通知 background 关闭当前标签页
+      log('通知 background 关闭当前页面');
+      chrome.runtime.sendMessage({
+        action: 'CLOSE_CURRENT_TAB'
+      });
+
     } catch (error) {
       log('视频处理失败:', error);
       handleTaskFailed(taskId, error.message);
     }
-  }
-
-  // 查找并点击下载按钮
-  async function findAndClickDownloadButton(taskId) {
-    log('🔍 查找下载按钮...');
-
-    // 查找各种可能的下载按钮
-    const downloadSelectors = [
-      'a[download]',
-      'button[download]',
-      '[aria-label*="download"]',
-      '[aria-label*="Download"]',
-      'a[href*="download"]',
-      'button[data-url*=".mp4"]',
-      'a[href*=".mp4"]'
-    ];
-
-    for (const selector of downloadSelectors) {
-      const elements = document.querySelectorAll(selector);
-      for (const el of elements) {
-        const href = el.href || el.getAttribute('href') || el.getAttribute('data-url') || el.download;
-        log('找到可能的下载元素:', selector, href);
-
-        if (href && !href.startsWith('blob:') && !href.startsWith('javascript:')) {
-          try {
-            log('尝试下载:', href);
-            const response = await fetch(href, {
-              mode: 'cors',
-              credentials: 'include'
-            });
-            const blob = await response.blob();
-            if (blob.size > 10000) {
-              log('✅ 从下载按钮获取成功，大小:', blob.size);
-              return blob;
-            }
-          } catch (e) {
-            log('下载按钮 fetch 失败:', e.message);
-          }
-        }
-      }
-    }
-
-    return null;
   }
 
   function handleTaskFailed(taskId, error) {
@@ -790,7 +1250,6 @@
         break;
 
       case 'DEBUG':
-        // 调试命令，返回当前状态
         sendResponse({
           videoUrls: window.__syaVideoUrls,
           responses: window.__syaCapturedResponses,

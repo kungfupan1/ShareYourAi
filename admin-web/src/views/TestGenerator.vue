@@ -69,16 +69,22 @@
         </el-row>
 
         <el-form-item label="参考图片">
-          <el-upload
-            class="image-uploader"
-            :show-file-list="false"
-            :before-upload="beforeImageUpload"
-            accept="image/*"
-          >
-            <img v-if="imageUrl" :src="imageUrl" class="uploaded-image" />
-            <el-icon v-else class="upload-icon"><Plus /></el-icon>
-          </el-upload>
-          <div class="upload-tip">可选，上传参考图片</div>
+          <div class="image-upload-container">
+            <el-upload
+              multiple
+              :limit="5"
+              :file-list="fileList"
+              :on-change="handleImageChange"
+              :on-remove="handleImageRemove"
+              :auto-upload="false"
+              accept="image/*"
+              list-type="picture-card"
+              class="image-upload-list"
+            >
+              <el-icon><Plus /></el-icon>
+            </el-upload>
+            <div class="upload-tip">最多5张，支持多选</div>
+          </div>
         </el-form-item>
 
         <el-form-item>
@@ -232,8 +238,8 @@ const form = ref({
 })
 
 const models = ref([])
-const imageUrl = ref('')
-const imageBase64 = ref('')
+const fileList = ref([])
+const imageBase64List = ref([])
 const loading = ref(false)
 const cancelling = ref(false)
 const currentTask = ref(null)
@@ -275,14 +281,47 @@ async function fetchHistory() {
   }
 }
 
-function beforeImageUpload(file) {
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    imageUrl.value = e.target.result
-    imageBase64.value = e.target.result
+function handleImageChange(file, list) {
+  // 限制最多5张
+  if (list.length > 5) {
+    list.splice(5)
+    ElMessage.warning('最多只能上传5张图片')
+    fileList.value = list
+    return
   }
-  reader.readAsDataURL(file)
-  return false
+
+  fileList.value = list
+
+  // 重新读取所有图片为 base64
+  imageBase64List.value = []
+  list.forEach((f, index) => {
+    if (f.raw) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        imageBase64List.value[index] = e.target.result
+      }
+      reader.readAsDataURL(f.raw)
+    } else if (f.url || f.base64) {
+      imageBase64List.value[index] = f.url || f.base64
+    }
+  })
+}
+
+function handleImageRemove(file, list) {
+  fileList.value = list
+  // 重新读取所有图片
+  imageBase64List.value = []
+  list.forEach((f, index) => {
+    if (f.raw) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        imageBase64List.value[index] = e.target.result
+      }
+      reader.readAsDataURL(f.raw)
+    } else if (f.url || f.base64) {
+      imageBase64List.value[index] = f.url || f.base64
+    }
+  })
 }
 
 async function submitTask() {
@@ -297,7 +336,7 @@ async function submitTask() {
     const res = await request.post('/tasks/submit', {
       model_id: form.value.model_id,
       prompt: form.value.prompt,
-      images: imageBase64.value ? [imageBase64.value] : null,
+      images: imageBase64List.value.length > 0 ? imageBase64List.value : null,
       params: {
         duration: form.value.duration,
         aspect_ratio: form.value.aspect_ratio,
@@ -406,8 +445,8 @@ function resetForm() {
     aspect_ratio: '16:9',
     resolution: '1080p'
   }
-  imageUrl.value = ''
-  imageBase64.value = ''
+  fileList.value = []
+  imageBase64List.value = []
 }
 
 function downloadResult() {
@@ -538,36 +577,24 @@ function formatTime(time) {
   padding: 0;
 }
 
-.image-uploader {
-  border: 1px dashed #d9d9d9;
-  border-radius: 6px;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  width: 200px;
-  height: 200px;
+.image-upload-container {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.image-uploader:hover {
-  border-color: #409eff;
+.image-upload-list :deep(.el-upload--picture-card) {
+  width: 80px;
+  height: 80px;
+  line-height: 80px;
 }
 
-.uploaded-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.upload-icon {
-  font-size: 28px;
-  color: #8c939d;
+.image-upload-list :deep(.el-upload-list--picture-card .el-upload-list__item) {
+  width: 80px;
+  height: 80px;
 }
 
 .upload-tip {
-  margin-top: 8px;
   color: #999;
   font-size: 12px;
 }

@@ -136,8 +136,10 @@ function bindEventListeners() {
 
   // 控制面板
   document.getElementById('btn-logout')?.addEventListener('click', handleLogout);
-  document.getElementById('btn-node-detail')?.addEventListener('click', showNodeDetail);
-  document.getElementById('btn-close-modal')?.addEventListener('click', closeNodeDetail);
+  document.getElementById('btn-user-more')?.addEventListener('click', showUserDetail);
+  document.getElementById('btn-close-user-modal')?.addEventListener('click', closeUserDetail);
+  document.getElementById('stat-today-tasks-item')?.addEventListener('click', showTaskHistory);
+  document.getElementById('btn-close-task-history')?.addEventListener('click', closeTaskHistory);
 }
 
 // 页面切换
@@ -424,11 +426,8 @@ async function updateCurrentTask() {
     console.log('popup: 正在请求任务...');
     const task = await chrome.runtime.sendMessage({ action: 'GET_TASK' });
     console.log('popup 收到任务:', task);
-    console.log('popup: task 类型:', typeof task);
-    console.log('popup: task.task_id:', task?.task_id);
 
     const taskCard = document.getElementById('task-card');
-    console.log('popup: taskCard 元素:', taskCard);
 
     if (task && task.task_id) {
       taskCard.style.display = 'block';
@@ -436,8 +435,16 @@ async function updateCurrentTask() {
       document.getElementById('task-model-display').textContent = task.model_id || '-';
       document.getElementById('task-prompt-display').textContent = task.prompt || '-';
       document.getElementById('task-prompt-display').title = task.prompt || '';
+
+      // 展开popup窗口
+      document.body.classList.add('task-expanded');
+      document.getElementById('app').classList.add('task-expanded');
     } else {
       taskCard.style.display = 'none';
+
+      // 收回popup窗口
+      document.body.classList.remove('task-expanded');
+      document.getElementById('app').classList.remove('task-expanded');
     }
   } catch (error) {
     console.error('获取当前任务失败:', error);
@@ -447,9 +454,9 @@ async function updateCurrentTask() {
 // 定期更新任务显示
 setInterval(updateCurrentTask, 2000);
 
-// 显示节点详情
-async function showNodeDetail() {
-  const modal = document.getElementById('node-detail-modal');
+// 显示用户详情（更多按钮）
+async function showUserDetail() {
+  const modal = document.getElementById('user-detail-modal');
   if (modal) {
     modal.classList.add('active');
 
@@ -467,12 +474,84 @@ async function showNodeDetail() {
   }
 }
 
-// 关闭节点详情
-function closeNodeDetail() {
-  const modal = document.getElementById('node-detail-modal');
+// 关闭用户详情
+function closeUserDetail() {
+  const modal = document.getElementById('user-detail-modal');
   if (modal) {
     modal.classList.remove('active');
   }
+}
+
+// 显示任务历史
+async function showTaskHistory() {
+  const modal = document.getElementById('task-history-modal');
+  if (modal) {
+    modal.classList.add('active');
+
+    // 加载任务历史
+    try {
+      const response = await fetch(`${API_BASE}/nodes/tasks`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      const tasks = await response.json();
+      renderTaskHistory(tasks);
+    } catch (error) {
+      console.error('加载任务历史失败:', error);
+      document.getElementById('task-history-list').innerHTML = '<div class="no-data">加载失败</div>';
+    }
+  }
+}
+
+// 关闭任务历史
+function closeTaskHistory() {
+  const modal = document.getElementById('task-history-modal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+}
+
+// 渲染任务历史列表
+function renderTaskHistory(tasks) {
+  const container = document.getElementById('task-history-list');
+  if (!container) return;
+
+  if (!tasks || tasks.length === 0) {
+    container.innerHTML = '<div class="no-data">暂无任务记录</div>';
+    return;
+  }
+
+  container.innerHTML = tasks.map(task => `
+    <div class="task-history-item">
+      <div class="task-history-header">
+        <span class="task-history-id">${task.task_id}</span>
+        <span class="task-history-status status-${task.status}">${getTaskStatusText(task.status)}</span>
+      </div>
+      <div class="task-history-info">
+        <div class="task-history-model">模型: ${task.model_id || '-'}</div>
+        <div class="task-history-time">${formatTime(task.create_time)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// 获取任务状态文本
+function getTaskStatusText(status) {
+  const texts = {
+    pending: '等待中',
+    processing: '执行中',
+    success: '成功',
+    failed: '失败',
+    timeout: '超时',
+    cancelled: '已取消'
+  };
+  return texts[status] || status;
+}
+
+// 格式化时间
+function formatTime(time) {
+  if (!time) return '-';
+  return new Date(time).toLocaleString('zh-CN');
 }
 
 // 渲染节点详情列表

@@ -243,7 +243,10 @@
       <div id="panel-page" class="page">
         <div class="panel-header">
           <div class="user-info">
-            <span id="panel-username">用户名</span>
+            <div class="user-info-row">
+              <span id="panel-username">用户名</span>
+              <button class="btn-more" id="btn-user-more" title="查看更多信息">更多</button>
+            </div>
             <span class="balance">余额: ¥<span id="panel-balance">0.00</span></span>
           </div>
           <button class="btn-logout" id="btn-logout">退出</button>
@@ -260,7 +263,6 @@
             <span class="platform-label">当前平台</span>
             <span class="platform-badge" id="current-platform">检测中...</span>
           </div>
-          <button class="btn-detail" id="btn-node-detail">查看详情 ›</button>
         </div>
 
         <!-- 当前任务卡片 -->
@@ -286,7 +288,7 @@
         </div>
 
         <div class="panel-stats">
-          <div class="stat-item">
+          <div class="stat-item clickable" id="stat-today-tasks-item">
             <div class="stat-value" id="stat-today-tasks">0</div>
             <div class="stat-label">今日任务</div>
           </div>
@@ -297,16 +299,27 @@
         </div>
       </div>
 
-      <!-- 节点详情弹窗 -->
-      <div id="node-detail-modal" class="modal">
+      <!-- 任务历史弹窗 -->
+      <div id="task-history-modal" class="modal">
         <div class="modal-content">
           <div class="modal-header">
-            <h3>节点详情</h3>
-            <button class="modal-close" id="btn-close-modal">×</button>
+            <h3>任务历史</h3>
+            <button class="modal-close" id="btn-close-task-history">×</button>
           </div>
-          <div class="modal-body">
-            <div id="nodes-detail-list"></div>
+          <div class="modal-body" id="task-history-list">
+            <div class="loading-tip">加载中...</div>
           </div>
+        </div>
+      </div>
+
+      <!-- 用户详情弹窗 -->
+      <div id="user-detail-modal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>用户信息</h3>
+            <button class="modal-close" id="btn-close-user-modal">×</button>
+          </div>
+          <div class="modal-body" id="nodes-detail-list"></div>
         </div>
       </div>
     </div>

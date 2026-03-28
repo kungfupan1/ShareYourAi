@@ -216,23 +216,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       disconnectWebSocket();
       sendResponse({ success: true });
       return true;
+    case 'CLOSE_CURRENT_TAB':
+      // 关闭当前任务标签页
+      closeCurrentTaskTab();
+      sendResponse({ success: true });
+      return true;
   }
 });
 
-// 处理新任务
+// 处理新任务 - 每次都新建标签页
 async function handleNewTask(task) {
   console.log('处理新任务:', task);
   currentTask = task;
 
-  // 存储到 chrome.storage（持久化）
+  // 存储到 chrome.storage
   await chrome.storage.local.set({ currentTask: task });
 
   // 显示通知和徽章
   showNotification('ShareYourAi', `开始执行任务: ${task.prompt?.substring(0, 30)}...`);
   updateBadge('执行中', '#FF9800');
 
-  // 打开对应的 AI 页面
-  // 优先使用任务中的 page_url，否则使用默认映射
+  // 获取任务 URL
   const defaultModelUrls = {
     'grok_video': 'https://grok.com',
     'sora2_video': 'https://sora.com',
@@ -240,76 +244,63 @@ async function handleNewTask(task) {
   };
 
   const url = task.page_url || defaultModelUrls[task.model_id];
-  console.log('任务 page_url:', task.page_url, '最终 URL:', url);
+  console.log('任务 URL:', url);
+
   if (url) {
     try {
-      let targetTab = null;
+      // 始终新建标签页
+      const targetTab = await chrome.tabs.create({ url });
+      console.log('已新建标签页:', url, 'tabId:', targetTab.id);
 
-      // 查找是否已有该页面
-      const tabs = await chrome.tabs.query({ url: `${url}/*` });
-      if (tabs.length > 0) {
-        targetTab = tabs[0];
-        await chrome.tabs.update(targetTab.id, { active: true });
-        await chrome.windows.update(targetTab.windowId, { focused: true });
-      } else {
-        targetTab = await chrome.tabs.create({ url });
-      }
-      console.log('已打开/激活页面:', url, 'tabId:', targetTab.id);
+      // 存储当前任务标签页ID
+      await chrome.storage.local.set({ currentTaskTabId: targetTab.id });
 
-      // 等待页面加载完成后发送任务给 content script
-      if (targetTab) {
-        // 等待页面加载
-        await new Promise(resolve => {
-          if (targetTab.status === 'complete') {
-            resolve();
-          } else {
-            const listener = (tabId, changeInfo) => {
-              if (tabId === targetTab.id && changeInfo.status === 'complete') {
-                chrome.tabs.onUpdated.removeListener(listener);
-                resolve();
-              }
-            };
-            chrome.tabs.onUpdated.addListener(listener);
-            // 超时保护
-            setTimeout(resolve, 5000);
-          }
+      // 等待页面加载完成
+      await new Promise(resolve => {
+        if (targetTab.status === 'complete') {
+          resolve();
+        } else {
+          const listener = (tabId, changeInfo) => {
+            if (tabId === targetTab.id && changeInfo.status === 'complete') {
+              chrome.tabs.onUpdated.removeListener(listener);
+              resolve();
+            }
+          };
+          chrome.tabs.onUpdated.addListener(listener);
+          setTimeout(resolve, 10000); // 超时保护
+        }
+      });
+
+      // 额外等待 content script 注入
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // 发送任务给 content script
+      console.log('发送 START_TASK 给 content script');
+      try {
+        const response = await chrome.tabs.sendMessage(targetTab.id, {
+          action: 'START_TASK',
+          task: task
         });
-
-        // 额外等待确保 content script 已注入
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // 发送任务给 content script 执行
-        console.log('发送 START_TASK 给 content script');
+        console.log('Content script 响应:', response);
+      } catch (error) {
+        console.error('发送任务失败，尝试注入 content script:', error);
         try {
-          const response = await chrome.tabs.sendMessage(targetTab.id, {
+          await chrome.scripting.executeScript({
+            target: { tabId: targetTab.id },
+            files: ['content/index.js']
+          });
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const retryResponse = await chrome.tabs.sendMessage(targetTab.id, {
             action: 'START_TASK',
             task: task
           });
-          console.log('Content script 响应:', response);
-        } catch (error) {
-          console.error('发送任务给 content script 失败:', error);
-          // 尝试注入 content script
-          try {
-            await chrome.scripting.executeScript({
-              target: { tabId: targetTab.id },
-              files: ['content/index.js']
-            });
-            console.log('已注入 content script');
-            // 等待脚本初始化
-            await new Promise(resolve => setTimeout(resolve, 500));
-            // 重试发送
-            const retryResponse = await chrome.tabs.sendMessage(targetTab.id, {
-              action: 'START_TASK',
-              task: task
-            });
-            console.log('重试发送成功:', retryResponse);
-          } catch (e) {
-            console.error('注入脚本或重试失败:', e);
-          }
+          console.log('重试发送成功:', retryResponse);
+        } catch (e) {
+          console.error('注入或重试失败:', e);
         }
       }
     } catch (error) {
-      console.error('打开页面失败:', error);
+      console.error('新建标签页失败:', error);
       showNotification('ShareYourAi', '任务执行失败: ' + error.message, 'error');
       updateBadge('失败', '#F44336');
     }
@@ -477,6 +468,27 @@ async function handleTaskFailed(data) {
     });
   } catch (error) {
     console.error('提交失败结果失败:', error);
+  }
+
+  currentTask = null;
+  await chrome.storage.local.remove(['currentTask']);
+}
+
+// 关闭当前任务标签页
+async function closeCurrentTaskTab() {
+  console.log('关闭当前任务标签页');
+
+  const storage = await chrome.storage.local.get(['currentTaskTabId']);
+  const tabId = storage.currentTaskTabId;
+
+  if (tabId) {
+    try {
+      await chrome.tabs.remove(tabId);
+      console.log('已关闭标签页:', tabId);
+    } catch (error) {
+      console.log('关闭标签页失败:', error);
+    }
+    await chrome.storage.local.remove(['currentTaskTabId']);
   }
 
   currentTask = null;

@@ -168,6 +168,41 @@ async def get_my_nodes(
     ]
 
 
+@router.get("/tasks")
+async def get_user_tasks(
+        limit: int = 20,
+        user: PluginUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """获取用户所有节点的任务历史"""
+    # 获取用户的所有节点ID
+    nodes = db.query(PluginNode).filter(
+        PluginNode.user_id == user.id
+    ).all()
+    node_ids = [n.node_id for n in nodes]
+
+    if not node_ids:
+        return []
+
+    # 查询这些节点的所有任务
+    tasks = db.query(PluginTask).filter(
+        PluginTask.assigned_node_id.in_(node_ids)
+    ).order_by(PluginTask.create_time.desc()).limit(limit).all()
+
+    return [
+        {
+            "task_id": t.task_id,
+            "model_id": t.model_id,
+            "status": t.status,
+            "prompt": t.prompt[:50] + '...' if t.prompt and len(t.prompt) > 50 else t.prompt,
+            "duration": t.duration_seconds,
+            "reward": t.node_reward,
+            "create_time": t.create_time
+        }
+        for t in tasks
+    ]
+
+
 @router.get("/{node_id}", response_model=NodeResponse)
 async def get_node(
         node_id: str,
