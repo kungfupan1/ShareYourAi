@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=380, height=520">
+  <title>ShareYourAi</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 小人动效容器 - 放在左上角 -->
+    <div class="characters-container" id="characterSection">
+      <div class="characters" id="charactersContainer">
+        <!-- 石头元素 -->
+        <div class="stone stone-1 stone-irregular1 stone-brown"></div>
+        <div class="stone stone-2 stone-irregular2 stone-gray"></div>
+        <div class="stone stone-3 stone-irregular3 stone-light-brown"></div>
+        <div class="stone stone-4 stone-irregular4 stone-dark-gray"></div>
+        <div class="stone stone-5 stone-irregular5 stone-brown"></div>
+        <div class="stone stone-6 stone-irregular6 stone-gray"></div>
+        <div class="stone stone-7 stone-irregular7 stone-light-brown"></div>
+        <div class="stone stone-8 stone-irregular8 stone-dark-gray"></div>
+
+        <!-- 大号石砾 -->
+        <div class="pebble-large pebble-large-1 pebble-large-gray"></div>
+        <div class="pebble-large pebble-large-2 pebble-large-brown"></div>
+        <div class="pebble-large pebble-large-3 pebble-large-beige"></div>
+        <div class="pebble-large pebble-large-4 pebble-large-gray"></div>
+        <div class="pebble-large pebble-large-5 pebble-large-brown"></div>
+        <div class="pebble-large pebble-large-6 pebble-large-beige"></div>
+        <div class="pebble-large pebble-large-7 pebble-large-gray"></div>
+        <div class="pebble-large pebble-large-8 pebble-large-brown"></div>
+        <div class="pebble-large pebble-large-9 pebble-large-beige"></div>
+        <div class="pebble-large pebble-large-10 pebble-large-gray"></div>
+
+        <!-- 细小石砾 -->
+        <div class="pebble pebble-1 pebble-gray"></div>
+        <div class="pebble pebble-2 pebble-brown"></div>
+        <div class="pebble pebble-3 pebble-beige"></div>
+        <div class="pebble pebble-4 pebble-gray"></div>
+        <div class="pebble pebble-5 pebble-brown"></div>
+        <div class="pebble pebble-6 pebble-beige"></div>
+        <div class="pebble pebble-7 pebble-gray"></div>
+        <div class="pebble pebble-8 pebble-brown"></div>
+        <div class="pebble pebble-9 pebble-beige"></div>
+        <div class="pebble pebble-10 pebble-gray"></div>
+
+        <!-- 草丛遮罩 -->
+        <div class="grass-mask">
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+          <div class="grass-blade"></div>
+        </div>
+
+        <!-- 紫色方头小人（最高） -->
+        <div class="character char-purple" id="charPurple">
+          <div class="char-body">
+            <div class="eyes">
+              <div class="eye-big left-eye">
+                <div class="eye-pupil"></div>
+              </div>
+              <div class="eye-big right-eye">
+                <div class="eye-pupil"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 黑色方头小人（次高） -->
+        <div class="character char-black" id="charBlack">
+          <div class="char-body">
+            <div class="eyes">
+              <div class="eye-big left-eye">
+                <div class="eye-pupil"></div>
+              </div>
+              <div class="eye-big right-eye">
+                <div class="eye-pupil"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 黄色圆头小人（次矮，带嘴巴） -->
+        <div class="character char-yellow" id="charYellow">
+          <div class="char-body">
+            <div class="eyes">
+              <div class="eye-small left-eye"></div>
+              <div class="eye-small right-eye"></div>
+            </div>
+            <div class="mouth"></div>
+          </div>
+        </div>
+
+        <!-- 橙色圆头小人（最矮最胖） -->
+        <div class="character char-orange" id="charOrange">
+          <div class="char-body">
+            <div class="eyes">
+              <div class="eye-small left-eye"></div>
+              <div class="eye-small right-eye"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 标题区域 - 放在小人右边 -->
+      <div class="title-area">
+        <h1 class="main-title">ShareYourAi</h1>
+        <p class="sub-title">分布式 AI 节点调度平台</p>
+      </div>
+    </div>
+
+    <!-- 主内容区域 -->
+    <div class="main-content">
+      <!-- 登录页面 -->
+      <div id="login-page" class="page active">
+        <div class="form-group">
+          <input type="text" id="login-username" placeholder="用户名 / 邮箱" />
+        </div>
+
+        <div class="form-group">
+          <input type="password" id="login-password" placeholder="密码" />
+          <span class="toggle-password" id="togglePassword">👁</span>
+        </div>
+
+        <div class="form-group checkbox">
+          <label><input type="checkbox" id="remember-me" /> 记住我</label>
+        </div>
+
+        <button class="btn-primary" id="btn-login">登 录</button>
+
+        <div class="divider"><span>或</span></div>
+
+        <button class="btn-secondary" id="btn-code-login-page">邮箱验证码登录</button>
+
+        <div class="links">
+          <a href="javascript:void(0)" id="link-to-register">立即注册</a>
+          <a href="javascript:void(0)" id="link-to-forgot">忘记密码</a>
+        </div>
+      </div>
+
+      <!-- 邮箱验证码登录 -->
+      <div id="code-login-page" class="page">
+        <div class="form-group">
+          <input type="email" id="code-email" placeholder="邮箱" />
+        </div>
+
+        <div class="form-group code-group">
+          <input type="text" id="code-input" placeholder="验证码" maxlength="6" />
+          <button class="btn-code" id="send-code-btn">获取验证码</button>
+        </div>
+
+        <button class="btn-primary" id="btn-code-login">登 录</button>
+
+        <div class="divider"><span>或</span></div>
+
+        <button class="btn-secondary" id="btn-user-login-page">用户名密码登录</button>
+
+        <div class="links">
+          <a href="javascript:void(0)" id="link-to-register2">立即注册</a>
+        </div>
+      </div>
+
+      <!-- 注册页面 -->
+      <div id="register-page" class="page">
+        <div class="form-group">
+          <input type="text" id="reg-username" placeholder="用户名 (4-20位字母/数字/下划线)" />
+        </div>
+
+        <div class="form-group">
+          <input type="email" id="reg-email" placeholder="邮箱" />
+        </div>
+
+        <div class="form-group code-group">
+          <input type="text" id="reg-code" placeholder="验证码" maxlength="6" />
+          <button class="btn-code" id="reg-send-code-btn">获取验证码</button>
+        </div>
+
+        <div class="form-group">
+          <input type="password" id="reg-password" placeholder="密码 (8-20位，含字母和数字)" />
+        </div>
+
+        <div class="form-group">
+          <input type="password" id="reg-confirm" placeholder="确认密码" />
+        </div>
+
+        <div class="form-group checkbox">
+          <label><input type="checkbox" id="agree-terms" /> 我已阅读并同意《用户协议》和《隐私政策》</label>
+        </div>
+
+        <button class="btn-primary" id="btn-register">注 册</button>
+
+        <div class="links">
+          <a href="javascript:void(0)" id="link-to-login-from-reg">已有账号？立即登录</a>
+        </div>
+      </div>
+
+      <!-- 忘记密码 -->
+      <div id="forgot-page" class="page">
+        <h2 class="page-title">找回密码</h2>
+
+        <div class="form-group">
+          <input type="email" id="forgot-email" placeholder="注册邮箱" />
+        </div>
+
+        <div class="form-group code-group">
+          <input type="text" id="forgot-code" placeholder="验证码" maxlength="6" />
+          <button class="btn-code" id="forgot-send-code-btn">获取验证码</button>
+        </div>
+
+        <div class="form-group">
+          <input type="password" id="forgot-password" placeholder="新密码" />
+        </div>
+
+        <div class="form-group">
+          <input type="password" id="forgot-confirm" placeholder="确认新密码" />
+        </div>
+
+        <button class="btn-primary" id="btn-reset-password">重置密码</button>
+
+        <div class="links">
+          <a href="javascript:void(0)" id="link-to-login-from-forgot">返回登录</a>
+        </div>
+      </div>
+
+      <!-- 控制面板 -->
+      <div id="panel-page" class="page">
+        <div class="panel-header">
+          <div class="user-info">
+            <span id="panel-username">用户名</span>
+            <span class="balance">余额: ¥<span id="panel-balance">0.00</span></span>
+          </div>
+          <button class="btn-logout" id="btn-logout">退出</button>
+        </div>
+
+        <!-- 当前节点状态卡片 -->
+        <div class="node-card">
+          <div class="node-card-header">
+            <span class="node-label">当前节点</span>
+            <span class="node-status-dot"></span>
+          </div>
+          <div class="node-id-display" id="node-id">初始化中...</div>
+          <div class="current-platform">
+            <span class="platform-label">当前平台</span>
+            <span class="platform-badge" id="current-platform">检测中...</span>
+          </div>
+          <button class="btn-detail" id="btn-node-detail">查看详情 ›</button>
+        </div>
+
+        <!-- 当前任务卡片 -->
+        <div class="task-card" id="task-card" style="display: none;">
+          <div class="task-card-header">
+            <span class="task-label">当前任务</span>
+            <span class="task-status" id="task-status">执行中</span>
+          </div>
+          <div class="task-info">
+            <div class="task-row">
+              <span class="task-key">任务ID</span>
+              <span class="task-value" id="task-id-display">-</span>
+            </div>
+            <div class="task-row">
+              <span class="task-key">模型</span>
+              <span class="task-value" id="task-model-display">-</span>
+            </div>
+            <div class="task-row">
+              <span class="task-key">提示词</span>
+              <span class="task-value task-prompt" id="task-prompt-display">-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-stats">
+          <div class="stat-item">
+            <div class="stat-value" id="stat-today-tasks">0</div>
+            <div class="stat-label">今日任务</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-today-earnings">¥0.00</div>
+            <div class="stat-label">今日收益</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 节点详情弹窗 -->
+      <div id="node-detail-modal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>节点详情</h3>
+            <button class="modal-close" id="btn-close-modal">×</button>
+          </div>
+          <div class="modal-body">
+            <div id="nodes-detail-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部状态栏 -->
+    <div class="status-bar">
+      <span id="connection-status">未连接</span>
+      <span class="version">v1.0.0</span>
+    </div>
+  </div>
+
+  <script src="characters.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

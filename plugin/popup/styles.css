@@ -1,0 +1,959 @@
+/* 基础样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 380px;
+  min-height: 520px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #ffffff;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
+}
+
+/* ============ 小人容器 - 左上角布局 ============ */
+.characters-container {
+  width: 100%;
+  height: 160px;
+  display: flex;
+  align-items: flex-end;
+  padding: 10px 15px;
+  background: transparent;
+  position: relative;
+}
+
+.characters {
+  position: relative;
+  width: 200px;
+  height: 140px;
+  margin-left: -35px;
+}
+
+/* 标题区域 - 放在小人右边，居中对齐 */
+.title-area {
+  margin-left: 5px;
+  padding-bottom: 25px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.main-title {
+  font-size: 30px;
+  font-weight: 700;
+  color: #4F46E5;
+  margin-bottom: 5px;
+}
+
+.sub-title {
+  font-size: 15px;
+  color: #666;
+}
+
+/* ============ 石头样式 ============ */
+.stone {
+  position: absolute;
+  bottom: -5px;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+  z-index: 20;
+}
+
+.pebble {
+  position: absolute;
+  bottom: -5px;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+  z-index: 18;
+  width: 3px;
+  height: 3px;
+}
+
+.pebble-large {
+  position: absolute;
+  bottom: -5px;
+  border-radius: 3px;
+  transition: all 0.3s ease;
+  z-index: 17;
+  width: 10px;
+  height: 10px;
+}
+
+/* 不规则形状石头 */
+.stone-irregular1 {
+  clip-path: polygon(50% 0%, 85% 15%, 100% 45%, 90% 75%, 65% 90%, 35% 85%, 10% 70%, 0% 40%, 15% 10%);
+}
+.stone-irregular2 {
+  clip-path: polygon(30% 0%, 70% 0%, 90% 30%, 80% 70%, 50% 90%, 20% 80%, 10% 40%);
+}
+.stone-irregular3 {
+  clip-path: polygon(0% 20%, 30% 0%, 70% 10%, 100% 30%, 90% 70%, 60% 90%, 20% 80%, 0% 50%);
+}
+.stone-irregular4 {
+  clip-path: polygon(40% 0%, 60% 0%, 80% 20%, 90% 50%, 70% 80%, 40% 100%, 10% 80%, 0% 40%, 20% 10%);
+}
+.stone-irregular5 {
+  clip-path: polygon(25% 0%, 75% 0%, 100% 40%, 80% 80%, 40% 100%, 10% 70%, 0% 30%);
+}
+.stone-irregular6 {
+  clip-path: polygon(0% 0%, 60% 5%, 90% 35%, 70% 75%, 30% 90%, 10% 60%, 0% 20%);
+}
+.stone-irregular7 {
+  clip-path: polygon(50% 0%, 80% 10%, 100% 45%, 75% 80%, 30% 90%, 5% 60%, 20% 15%);
+}
+.stone-irregular8 {
+  clip-path: polygon(10% 0%, 90% 10%, 80% 60%, 50% 90%, 20% 80%, 0% 40%);
+}
+
+/* 石头颜色 */
+.stone-brown { background: linear-gradient(135deg, #8B7355 0%, #5D4037 100%); }
+.stone-light-brown { background: linear-gradient(135deg, #D7CCC8 0%, #BCAAA4 100%); }
+.stone-gray { background: linear-gradient(135deg, #757575 0%, #424242 100%); }
+.stone-dark-gray { background: linear-gradient(135deg, #616161 0%, #212121 100%); }
+
+.pebble-gray { background: linear-gradient(135deg, #888888 0%, #555555 100%); }
+.pebble-brown { background: linear-gradient(135deg, #997755 0%, #775533 100%); }
+.pebble-beige { background: linear-gradient(135deg, #AAAA99 0%, #888877 100%); }
+
+.pebble-large-gray { background: linear-gradient(135deg, #999999 0%, #666666 100%); }
+.pebble-large-brown { background: linear-gradient(135deg, #AA8866 0%, #886644 100%); }
+.pebble-large-beige { background: linear-gradient(135deg, #BBBBAA 0%, #999988 100%); }
+
+/* 8块石头位置 - 50%缩放 */
+.stone-1 { width: 22px; height: 22px; left: 25%; bottom: -6px; z-index: 25; }
+.stone-2 { width: 9px; height: 9px; left: 32%; bottom: -4px; z-index: 28; }
+.stone-3 { width: 18px; height: 18px; left: 38%; bottom: -8px; z-index: 22; }
+.stone-4 { width: 11px; height: 11px; left: 45%; bottom: -5px; z-index: 27; }
+.stone-5 { width: 20px; height: 20px; left: 50%; bottom: -9px; z-index: 21; }
+.stone-6 { width: 8px; height: 8px; left: 58%; bottom: -3px; z-index: 29; }
+.stone-7 { width: 14px; height: 14px; left: 65%; bottom: -6px; z-index: 23; }
+.stone-8 { width: 16px; height: 16px; left: 72%; bottom: -5px; z-index: 24; }
+
+/* 10个细小石砾位置 */
+.pebble-1 { left: 22%; bottom: -6px; width: 4px; height: 4px; }
+.pebble-2 { left: 28%; bottom: -5px; width: 3px; height: 3px; }
+.pebble-3 { left: 35%; bottom: -7px; width: 3px; height: 3px; }
+.pebble-4 { left: 41%; bottom: -5px; width: 3px; height: 3px; }
+.pebble-5 { left: 47%; bottom: -7px; width: 4px; height: 4px; }
+.pebble-6 { left: 53%; bottom: -6px; width: 3px; height: 3px; }
+.pebble-7 { left: 60%; bottom: -6px; width: 3px; height: 3px; }
+.pebble-8 { left: 66%; bottom: -4px; width: 4px; height: 4px; }
+.pebble-9 { left: 72%; bottom: -7px; width: 3px; height: 3px; }
+.pebble-10 { left: 78%; bottom: -5px; width: 3px; height: 3px; }
+
+/* 10个大号石砾位置 */
+.pebble-large-1 { left: 18%; bottom: -8px; width: 11px; height: 11px; }
+.pebble-large-2 { left: 30%; bottom: -9px; width: 9px; height: 9px; }
+.pebble-large-3 { left: 42%; bottom: -7px; width: 11px; height: 11px; }
+.pebble-large-4 { left: 55%; bottom: -10px; width: 10px; height: 10px; }
+.pebble-large-5 { left: 68%; bottom: -8px; width: 10px; height: 10px; }
+.pebble-large-6 { left: 80%; bottom: -9px; width: 9px; height: 9px; }
+.pebble-large-7 { left: 25%; bottom: -10px; width: 12px; height: 12px; }
+.pebble-large-8 { left: 38%; bottom: -7px; width: 9px; height: 9px; }
+.pebble-large-9 { left: 50%; bottom: -9px; width: 10px; height: 10px; }
+.pebble-large-10 { left: 70%; bottom: -8px; width: 11px; height: 11px; }
+
+/* ============ 草丛样式 ============ */
+.grass-mask {
+  position: absolute;
+  bottom: -5px;
+  left: 0;
+  width: 100%;
+  height: 30px;
+  z-index: 15;
+  pointer-events: none;
+}
+
+.grass-blade {
+  position: absolute;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(to top, #2d5d23, #4a9d3e);
+  border-radius: 2px 2px 0 0;
+  transform-origin: bottom center;
+  animation: grassSway 3s ease-in-out infinite alternate;
+}
+
+/* 草丛位置 */
+.grass-blade:nth-child(1) { left: 20%; height: 25px; animation-delay: 0s; }
+.grass-blade:nth-child(2) { left: 25%; height: 23px; animation-delay: 0.3s; }
+.grass-blade:nth-child(3) { left: 30%; height: 28px; animation-delay: 0.6s; }
+.grass-blade:nth-child(4) { left: 35%; height: 24px; animation-delay: 0.2s; }
+.grass-blade:nth-child(5) { left: 40%; height: 26px; animation-delay: 0.8s; }
+.grass-blade:nth-child(6) { left: 42%; height: 29px; animation-delay: 0.1s; }
+.grass-blade:nth-child(7) { left: 45%; height: 23px; animation-delay: 0.5s; }
+.grass-blade:nth-child(8) { left: 48%; height: 27px; animation-delay: 0.7s; }
+.grass-blade:nth-child(9) { left: 50%; height: 25px; animation-delay: 0.4s; }
+.grass-blade:nth-child(10) { left: 52%; height: 28px; animation-delay: 0.9s; }
+.grass-blade:nth-child(11) { left: 55%; height: 26px; animation-delay: 0.25s; }
+.grass-blade:nth-child(12) { left: 58%; height: 24px; animation-delay: 0.55s; }
+.grass-blade:nth-child(13) { left: 60%; height: 27px; animation-delay: 0.85s; }
+.grass-blade:nth-child(14) { left: 65%; height: 30px; animation-delay: 0.15s; }
+.grass-blade:nth-child(15) { left: 70%; height: 22px; animation-delay: 0.45s; }
+.grass-blade:nth-child(16) { left: 72%; height: 29px; animation-delay: 0.75s; }
+.grass-blade:nth-child(17) { left: 75%; height: 24px; animation-delay: 0.35s; }
+.grass-blade:nth-child(18) { left: 78%; height: 27px; animation-delay: 0.65s; }
+.grass-blade:nth-child(19) { left: 38%; height: 30px; animation-delay: 0.05s; }
+.grass-blade:nth-child(20) { left: 62%; height: 24px; animation-delay: 0.95s; }
+
+@keyframes grassSway {
+  0% { transform: rotate(-3deg); }
+  100% { transform: rotate(3deg); }
+}
+
+/* ============ 小人初始探出头动画 ============ */
+.character {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: fit-content;
+  height: fit-content;
+  z-index: 5;
+}
+
+.char-body {
+  position: relative;
+  background-color: inherit;
+  border-radius: 80% 80% 0 0 !important;
+  transform-origin: bottom center !important;
+  transition: transform 0.4s ease-out;
+  bottom: 0;
+  min-height: 50px;
+  transform: scaleY(0);  /* 初始状态 */
+}
+
+/* 探出头动画 - 同一个动画，不同延迟 */
+.char-purple.pop-up .char-body { animation: popUpFromGrass 0.5s ease-out 0s forwards; }
+.char-black.pop-up .char-body { animation: popUpFromGrass 0.5s ease-out 0.25s forwards; }
+.char-yellow.pop-up .char-body { animation: popUpFromGrass 0.5s ease-out 0.25s forwards; }
+.char-orange.pop-up .char-body { animation: popUpFromGrass 0.5s ease-out 0.75s forwards; }
+
+@keyframes popUpFromGrass {
+  0% {
+    transform: scaleY(0);
+  }
+  70% {
+    transform: scaleY(1.02);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+/* 眼睛 */
+.eyes {
+  position: absolute;
+  display: flex;
+  gap: 4px;
+  z-index: 25;
+  transition: all 0.3s ease;
+  transform-origin: center;
+}
+
+/* 大眼睛（白+黑瞳） */
+.eye-big {
+  width: 6px;
+  height: 6px;
+  background-color: #fff;
+  border-radius: 50%;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.eye-pupil {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background-color: #000;
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: transform 0.2s ease;
+}
+
+/* 小眼睛（纯黑） */
+.eye-small {
+  width: 4px;
+  height: 4px;
+  background-color: #000;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+/* 嘴巴 */
+.mouth {
+  position: absolute;
+  width: 10px;
+  height: 1px;
+  background-color: #000;
+  left: 50%;
+  transform: translateX(-50%);
+  transition: all 0.3s ease;
+  transform-origin: center;
+  z-index: 25;
+}
+
+/* ============ 四个小人定位 - 50%缩放 ============ */
+/* 紫色方头（最高） */
+.char-purple {
+  --color: #5D38E6;
+  left: 90px;
+  z-index: 3;
+}
+.char-purple .char-body {
+  width: 30px;
+  height: 130px;
+  background-color: var(--color);
+  border-radius: 5px 5px 0 0 !important;
+}
+.char-purple .eyes {
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* 黑色方头（次高） */
+.char-black {
+  --color: #000000;
+  left: 60px;
+  z-index: 4;
+}
+.char-black .char-body {
+  width: 25px;
+  height: 110px;
+  background-color: var(--color);
+  border-radius: 4px 4px 0 0 !important;
+}
+.char-black .eyes {
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* 黄色圆头（次矮） */
+.char-yellow {
+  --color: #F5D352;
+  left: 105px;
+  z-index: 5;
+}
+.char-yellow .char-body {
+  width: 30px;
+  height: 90px;
+  background-color: var(--color);
+  border-radius: 30px 30px 0 0 !important;
+}
+.char-yellow .eyes {
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.char-yellow .mouth {
+  top: 25px;
+}
+
+/* 橙色圆头（最矮最胖） */
+.char-orange {
+  --color: #F57A52;
+  left: 40px;
+  z-index: 6;
+}
+.char-orange .char-body {
+  width: 50px;
+  height: 65px;
+  background-color: var(--color);
+  border-radius: 90% 90% 0 0 !important;
+}
+.char-orange .eyes {
+  top: 13px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* ============ 偷窥状态 ============ */
+.character.peeking .char-body {
+  height: calc(var(--original-height) + 15px);
+  transform: rotate(8deg) translateY(-5px);
+}
+
+.character.peeking .eye-big {
+  width: 8px;
+  height: 8px;
+  transform: rotate(15deg);
+}
+
+.character.peeking .char-yellow .eye-small {
+  width: 5px;
+  height: 5px;
+  transform: rotate(15deg);
+}
+
+.character.peeking .char-orange .eye-small {
+  width: 4px;
+  height: 4px;
+  transform: rotate(15deg);
+}
+
+.character.peeking .eye-pupil {
+  width: 3px;
+  height: 3px;
+}
+
+.character.peeking .mouth {
+  width: 11px;
+  height: 1.4px;
+  transform: translateX(-50%) rotate(4.5deg);
+}
+
+/* ============ 主内容区域 ============ */
+.main-content {
+  flex: 1;
+  padding: 15px 20px;
+  overflow-y: auto;
+  background: #f8f9fa;
+}
+
+.page {
+  display: none;
+}
+
+.page.active {
+  display: block;
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #4F46E5;
+  margin-bottom: 15px;
+}
+
+/* 表单样式 */
+.form-group {
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  transition: border-color 0.3s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #4F46E5;
+}
+
+.form-group.code-group {
+  display: flex;
+  gap: 8px;
+}
+
+.form-group.code-group input {
+  flex: 1;
+}
+
+.btn-code {
+  padding: 0 12px;
+  background: #4F46E5;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-code:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+}
+
+.checkbox label {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #666;
+  cursor: pointer;
+}
+
+.checkbox input {
+  width: auto;
+  margin-right: 6px;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  opacity: 0.6;
+  font-size: 14px;
+}
+
+/* 按钮样式 */
+.btn-primary {
+  width: 100%;
+  padding: 11px;
+  background: #4F46E5;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.btn-primary:hover {
+  background: #4338CA;
+}
+
+.btn-primary:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  width: 100%;
+  padding: 11px;
+  background: white;
+  color: #4F46E5;
+  border: 1px solid #4F46E5;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-secondary:hover {
+  background: #F5F3FF;
+}
+
+.divider {
+  text-align: center;
+  margin: 15px 0;
+  position: relative;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 40%;
+  height: 1px;
+  background: #ddd;
+}
+
+.divider::before { left: 0; }
+.divider::after { right: 0; }
+
+.divider span {
+  background: #f8f9fa;
+  padding: 0 10px;
+  color: #999;
+  font-size: 12px;
+}
+
+.links {
+  text-align: center;
+  margin-top: 12px;
+}
+
+.links a {
+  color: #4F46E5;
+  text-decoration: none;
+  font-size: 12px;
+  margin: 0 8px;
+}
+
+.links a:hover {
+  text-decoration: underline;
+}
+
+/* 控制面板样式 */
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 12px;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-info #panel-username {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.user-info .balance {
+  color: #10B981;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.btn-logout {
+  padding: 5px 10px;
+  background: #EF4444;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.panel-stats {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.stat-item {
+  flex: 1;
+  background: white;
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: #4F46E5;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #666;
+  margin-top: 3px;
+}
+
+/* 节点卡片 */
+.node-card {
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 15px;
+  color: white;
+}
+
+.node-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.node-label {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.node-status-dot {
+  width: 8px;
+  height: 8px;
+  background: #10B981;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.node-id-display {
+  font-size: 18px;
+  font-weight: 600;
+  font-family: monospace;
+  margin-bottom: 12px;
+  word-break: break-all;
+}
+
+.current-platform {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.platform-label {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.platform-badge {
+  font-size: 20px;
+  font-weight: 700;
+  padding: 4px 12px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 6px;
+}
+
+.platform-badge.platform-none {
+  font-size: 14px;
+  opacity: 0.6;
+}
+
+.platform-badge.platform-grok { background: rgba(0, 255, 136, 0.3); }
+.platform-badge.platform-sora { background: rgba(255, 107, 53, 0.3); }
+.platform-badge.platform-runway { background: rgba(99, 102, 241, 0.3); }
+.platform-badge.platform-gemini { background: rgba(66, 133, 244, 0.3); }
+.platform-badge.platform-chatgpt { background: rgba(16, 163, 127, 0.3); }
+.platform-badge.platform-claude { background: rgba(204, 133, 85, 0.3); }
+
+.btn-detail {
+  width: 100%;
+  padding: 8px;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-detail:hover {
+  background: rgba(255,255,255,0.25);
+}
+
+/* 弹窗 */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal.active {
+  display: flex;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 340px;
+  max-height: 80%;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-header h3 {
+  font-size: 16px;
+  color: #333;
+}
+
+.modal-close {
+  width: 28px;
+  height: 28px;
+  background: #f5f5f5;
+  border: none;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-body {
+  padding: 15px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* 节点详情列表 */
+.node-detail-item {
+  background: #f8f8f8;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.node-detail-item.current {
+  background: #F5F3FF;
+  border: 1px solid #4F46E5;
+}
+
+.node-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.node-detail-header .node-id {
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.current-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #4F46E5;
+  color: white;
+  border-radius: 10px;
+}
+
+.node-detail-info {
+  font-size: 12px;
+  color: #666;
+}
+
+.node-detail-info .node-platform {
+  margin-bottom: 6px;
+}
+
+.node-detail-info .node-platform .label {
+  color: #999;
+}
+
+.node-detail-info .node-stats {
+  display: flex;
+  gap: 15px;
+}
+
+.no-data {
+  text-align: center;
+  color: #999;
+  padding: 20px;
+  font-size: 14px;
+}
+
+/* 状态栏 */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 20px;
+  background: #1e1e2d;
+  color: #b0b0b0;
+  font-size: 11px;
+  margin-top: auto;
+}
+
+.status-bar .version {
+  color: #666;
+}
+
+.status-connected {
+  color: #10B981;
+}
+
+.status-disconnected {
+  color: #EF4444;
+}
+
+/* ============ 任务卡片 ============ */
+.task-card {
+  background: linear-gradient(135deg, #2d2d44 0%, #1e1e2d 100%);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 12px 0;
+  border: 1px solid #3a3a50;
+}
+
+.task-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.task-label {
+  font-size: 12px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.task-status {
+  background: #10B981;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.task-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.task-key {
+  font-size: 11px;
+  color: #666;
+  min-width: 50px;
+}
+
+.task-value {
+  font-size: 12px;
+  color: #e0e0e0;
+  text-align: right;
+  word-break: break-all;
+}
+
+.task-prompt {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
