@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # ==================== Python 后端 ====================
+  backend:
+    build: ./backend
+    image: hitom-backend:latest
+    container_name: hitom_backend
+    volumes:
+      # 数据库持久化
+      - ./backend/hi_tom_ai.db:/app/hi_tom_ai.db
+      # 上传文件持久化
+      - ./backend/uploads:/app/uploads
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==================== Nginx 前端网关 ====================
+  nginx:
+    image: nginx:alpine
+    container_name: hitom_nginx
+    ports:
+      - "8080:8080"    # 用户端 (宿主机8080 → 容器8080)
+      - "8081:8081"    # 管理后台 (宿主机8081 → 容器8081)
+    volumes:
+      # 前端静态文件
+      - ./user-web/dist:/usr/share/nginx/html/user
+      - ./admin-web/dist:/usr/share/nginx/html/admin
+      # Nginx 配置
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # 上传文件目录
+      - ./backend/uploads:/app/uploads:ro
+    depends_on:
+      - backend
+    restart: always

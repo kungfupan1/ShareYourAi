@@ -314,6 +314,7 @@ async def upload_video(
     task.file_format = "mp4"
     task.status = 'success'
     task.end_time = datetime.now()
+    task.images = None  # 清空图片数据，释放数据库空间
 
     if task.start_time:
         task.duration_seconds = int((task.end_time - task.start_time).total_seconds())
@@ -402,6 +403,7 @@ async def submit_task_result(
     task.result_url = result.result_url
     task.error_message = result.error_message
     task.end_time = datetime.now()
+    task.images = None  # 清空图片数据，释放数据库空间
 
     if task.start_time:
         task.duration_seconds = int((task.end_time - task.start_time).total_seconds())
