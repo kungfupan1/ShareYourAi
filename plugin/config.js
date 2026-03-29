@@ -4,7 +4,7 @@
  */
 
 // 当前环境：'development' 或 'production'
-const ENV = 'development';
+const ENV = 'production';
 
 // 环境配置
 const CONFIG = {

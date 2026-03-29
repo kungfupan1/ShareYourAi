@@ -4,7 +4,7 @@
 
 // ============ 环境配置 ============
 // 切换环境修改这里
-const ENV = 'development';
+const ENV = 'production';
 
 const CONFIG = {
   development: {
@@ -587,27 +587,5 @@ setInterval(async () => {
     }
   }
 }, 30000);  // 每30秒检查一次
-
-// 发送心跳（每25秒，配合Redis TTL 60秒）
-setInterval(async () => {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    const storage = await chrome.storage.local.get(['token', 'nodeId']);
-    if (storage.token && storage.nodeId) {
-      // 通过 HTTP API 发送心跳
-      try {
-        await fetch(`${API_BASE}/nodes/heartbeat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${storage.token}`
-          },
-          body: JSON.stringify({ node_id: storage.nodeId })
-        });
-      } catch (error) {
-        console.error('心跳发送失败:', error);
-      }
-    }
-  }
-}, 25000);
 
 console.log('Background Service Worker 已启动');

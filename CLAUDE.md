@@ -47,7 +47,9 @@ Load the `plugin/` directory as an unpacked extension in Chrome. No build step r
 - `plugin/background/index.js` (line 7)
 - `plugin/config.js` (line 7)
 
-Options: `'development'` (localhost:8000) or `'production'` (shareyouai.winepipeline.com:8082)
+Options: `'development'` (localhost:8000) or `'production'` (shareyouai.winepipeline.com)
+
+Note: Production uses HTTPS/WSS, development uses HTTP/WS.
 
 ## Architecture
 
@@ -79,8 +81,12 @@ Options: `'development'` (localhost:8000) or `'production'` (shareyouai.winepipe
 ### Plugin Structure (`plugin/`)
 - Chrome Extension Manifest V3
 - `background/index.js` - Service worker handling task routing and API communication
-- `content/index.js` - Content script that intercepts fetch requests on AI pages to capture proof data
+- `content/` - Content scripts for intercepting AI page requests:
+  - `bridge.js` - Creates message channel between page script and content script
+  - `inject.js` - Injected into page context to intercept fetch/XHR responses (MV3 can't read response bodies in background)
+  - `index.js` - Content script that coordinates with injected script and background
 - `popup/` - Extension popup UI
+- `config.js` - Environment configuration (API_BASE, WS_URL)
 - Supported AI platforms: `grok.com`, `sora.com`, `runwayml.com` (configured in manifest.json)
 
 ## Key Concepts
@@ -134,16 +140,28 @@ Backend supports these optional environment variables:
 
 Backend endpoint: `/health` - Returns `{"status": "healthy", "service": "ShareYourAi Backend"}`
 
+## Backend Background Tasks
+
+FastAPI lifespan in `main.py` runs two background tasks:
+- **Timeout checker**: Every 60 seconds, marks `processing` tasks exceeding 5 minutes as `timeout`
+- **Auto-audit**: Every 30 minutes, auto-approves `auditing` tasks that succeeded > 24 hours ago, moving them to `settled` and updating user balances
+
 ## Upload Limits
 
 - Nginx: `client_max_body_size 50M` (configured in nginx.conf)
-- COS credentials: 5-minute expiry, bound to task_id
+- COS credentials: 5-minute expiry for presigned PUT URLs, bound to task_id
 
 ## API Authentication
 
 - User endpoints: Bearer token in Authorization header
 - Admin endpoints: `user_id` query parameter (simplified auth for admin panel)
 - External API: `api_key` query parameter validated against `external_api_key` system config
+
+### External API Endpoints
+
+For demand-side systems (e.g., Hi-Tom-AI):
+- `POST /api/tasks/external/submit?api_key=xxx` - Submit task from external system
+- `GET /api/tasks/external/status/{task_id}?api_key=xxx` - Query task status and result URL
 
 ## WebSocket Protocol
 

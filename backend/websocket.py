@@ -172,8 +172,11 @@ async def handle_message(db: Session, node: PluginNode, data: dict):
         node.last_heartbeat = datetime.now()
         db.commit()
 
-        # 刷新 Redis WebSocket 会话 TTL（60秒）
+        # 刷新 WebSocket 会话 TTL（60秒）
         redis_client.refresh_ws_session(node.node_id, ttl=60)
+
+        # 同时更新节点在线状态（替代 HTTP 心跳，TTL 120秒）
+        redis_client.set_node_online(node.node_id, ttl=120)
 
     elif msg_type == 'status_update':
         # 状态更新
