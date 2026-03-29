@@ -110,8 +110,8 @@ class RedisClient:
         return count
 
     # ============ WebSocket 会话相关 ============
-    def set_ws_session(self, node_id: str, session_id: str, ttl: int = 86400):
-        """设置 WebSocket 会话"""
+    def set_ws_session(self, node_id: str, session_id: str, ttl: int = 60):
+        """设置 WebSocket 会话（TTL改为60秒，配合心跳续期）"""
         key = f"ws_session:{node_id}"
         self.client.setex(key, ttl, session_id)
 
@@ -124,6 +124,38 @@ class RedisClient:
         """删除 WebSocket 会话"""
         key = f"ws_session:{node_id}"
         self.client.delete(key)
+
+    def refresh_ws_session(self, node_id: str, ttl: int = 60):
+        """刷新 WebSocket 会话 TTL"""
+        key = f"ws_session:{node_id}"
+        if self.client.exists(key):
+            self.client.expire(key, ttl)
+
+    # ============ 分布式锁相关 ============
+    def acquire_node_lock(self, node_id: str, ttl: int = 5) -> bool:
+        """
+        尝试获取节点锁（用于并发派单）
+
+        Args:
+            node_id: 节点ID
+            ttl: 锁过期时间（秒），防止死锁
+
+        Returns:
+            True 表示获取成功，False 表示已被锁定
+        """
+        key = f"node_lock:{node_id}"
+        # SETNX + EXPIRE 原子操作
+        return self.client.set(key, "1", nx=True, ex=ttl) is not None
+
+    def release_node_lock(self, node_id: str):
+        """释放节点锁"""
+        key = f"node_lock:{node_id}"
+        self.client.delete(key)
+
+    def is_node_locked(self, node_id: str) -> bool:
+        """检查节点是否被锁定"""
+        key = f"node_lock:{node_id}"
+        return self.client.exists(key) > 0
 
     # ============ 统计相关 ============
     def incr_daily_stat(self, stat_key: str, date_str: str = None) -> int:

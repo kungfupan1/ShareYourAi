@@ -229,6 +229,7 @@ async function handleLogin() {
 
       showPage('panel-page');
       loadPanelData();
+      connectWebSocket();  // 登录成功后连接 WebSocket
     } else {
       alert(data.detail || '登录失败');
     }
@@ -367,20 +368,21 @@ async function handleLogout() {
     ws.close();
   }
 
-  await chrome.storage.local.remove(['token', 'user']);
+  // 清除所有存储（包括旧的 token）
+  await chrome.storage.local.clear();
   token = null;
   user = null;
 
   showPage('login-page');
+  console.log('已清除所有存储并退出登录');
 }
 
 // 加载面板数据
 async function loadPanelData() {
   if (!user) return;
 
-  // 显示用户信息
+  // 显示用户名（先用缓存）
   document.getElementById('panel-username').textContent = user.username;
-  document.getElementById('panel-balance').textContent = user.balance?.toFixed(2) || '0.00';
 
   // 显示节点ID
   document.getElementById('node-id').textContent = nodeId || '未初始化';
@@ -388,6 +390,26 @@ async function loadPanelData() {
   // 检测当前AI平台
   currentAIPlatform = await detectAIPlatform();
   updatePlatformDisplay();
+
+  // 从后端获取最新用户信息和统计数据
+  try {
+    // 获取最新用户信息（余额等）
+    const userResponse = await fetch(`${API_BASE}/auth/me`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (userResponse.ok) {
+      const latestUser = await userResponse.json();
+      // 更新本地缓存
+      user = latestUser;
+      await chrome.storage.local.set({ user });
+    }
+  } catch (error) {
+    console.error('获取用户信息失败:', error);
+  }
+
+  // 显示余额
+  document.getElementById('panel-balance').textContent = (user?.withdrawable || 0).toFixed(2);
+  document.getElementById('panel-auditing').textContent = (user?.frozen_auditing || 0).toFixed(2);
 
   // 加载节点统计
   try {
@@ -527,6 +549,7 @@ function renderTaskHistory(tasks) {
       </div>
       <div class="task-history-info">
         <div class="task-history-model">模型: ${task.model_id || '-'}</div>
+        <div class="task-history-prompt" title="${task.prompt || ''}">提示词: ${task.prompt ? (task.prompt.length > 50 ? task.prompt.substring(0, 50) + '...' : task.prompt) : '-'}</div>
         <div class="task-history-time">${formatTime(task.create_time)}</div>
       </div>
     </div>
@@ -575,7 +598,7 @@ function renderNodesDetail(nodes) {
         </div>
         <div class="node-stats">
           <span>今日任务: ${node.today_tasks || 0}</span>
-          <span>状态: ${node.status === 'online' ? '在线' : '离线'}</span>
+          <span>状态: ${node.status === 'idle' ? '在线' : node.status === 'busy' ? '执行中' : '离线'}</span>
         </div>
       </div>
     </div>

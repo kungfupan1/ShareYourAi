@@ -133,7 +133,7 @@ async def get_node_stats(
 
     # 计算今日统计
     today = get_today_str()
-    total_today_tasks = sum(n.today_tasks or 0 for n in nodes)
+    total_today_tasks = sum(n.today_success or 0 for n in nodes)
     total_today_earnings = sum(n.today_earnings or 0 for n in nodes)
 
     return {

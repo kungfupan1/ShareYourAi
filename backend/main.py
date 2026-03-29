@@ -115,6 +115,54 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(check_timeout_tasks())
     print("任务超时检查已启动（超时时间：5分钟）")
 
+    # 启动自动审核定时任务
+    async def auto_audit_tasks():
+        """定时自动审核任务（每30分钟检查一次，审核通过超过24小时的任务）"""
+        from models import PluginTask, PluginUser
+        from datetime import datetime, timedelta
+        while True:
+            await asyncio.sleep(1800)  # 每30分钟检查一次
+            try:
+                db = SessionLocal()
+                # 查找 auditing 状态超过 24 小时的任务
+                audit_threshold = datetime.now() - timedelta(hours=24)
+
+                auditing_tasks = db.query(PluginTask).filter(
+                    PluginTask.earning_status == 'auditing',
+                    PluginTask.end_time < audit_threshold,
+                    PluginTask.status == 'success'
+                ).all()
+
+                for task in auditing_tasks:
+                    # 自动审核通过
+                    task.earning_status = 'settled'
+
+                    # 更新用户余额
+                    user = db.query(PluginUser).filter(PluginUser.id == task.user_id).first()
+                    if user:
+                        user.frozen_auditing = (user.frozen_auditing or 0) - (task.node_reward or 0)
+                        user.frozen_settled = (user.frozen_settled or 0) + (task.node_reward or 0)
+                        user.withdrawable = (user.withdrawable or 0) + (task.node_reward or 0)
+                        user.balance = (user.balance or 0) + (task.node_reward or 0)
+                        user.total_earned = (user.total_earned or 0) + (task.node_reward or 0)
+
+                    print(f"[自动审核] 任务 {task.task_id} 自动审核通过，奖励 {task.node_reward}")
+
+                if auditing_tasks:
+                    db.commit()
+                    print(f"[自动审核] 本次审核通过 {len(auditing_tasks)} 个任务")
+
+                db.close()
+            except Exception as e:
+                print(f"[自动审核] 检查失败: {e}")
+                try:
+                    db.close()
+                except:
+                    pass
+
+    asyncio.create_task(auto_audit_tasks())
+    print("自动审核已启动（审核延迟：24小时）")
+
     yield
 
     # 关闭时清理

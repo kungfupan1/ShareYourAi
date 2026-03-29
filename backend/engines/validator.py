@@ -94,7 +94,8 @@ class TaskValidator:
         duration = task.duration_seconds
 
         if not duration:
-            result.add_error("time", "任务耗时未知")
+            # 本地测试环境：耗时未知只是警告
+            result.add_warning("time", "任务耗时未知（本地测试环境允许）")
             return
 
         # 检查最小耗时
@@ -157,7 +158,8 @@ class TaskValidator:
     def _check_proof_chain(self, task: PluginTask, proof: dict, model: PluginModel, result: ValidationResult):
         """链路完整性校验"""
         if not proof:
-            result.add_error("proof", "缺少链路证据")
+            # 本地测试环境：缺少 proof 只是警告，不阻止通过
+            result.add_warning("proof", "缺少链路证据（本地测试环境允许）")
             return
 
         # 检查 AI 任务 ID

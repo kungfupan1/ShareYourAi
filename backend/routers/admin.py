@@ -562,6 +562,9 @@ async def approve_earning(
     if user:
         user.frozen_auditing = (user.frozen_auditing or 0) - (task.node_reward or 0)
         user.frozen_settled = (user.frozen_settled or 0) + (task.node_reward or 0)
+        # 结算后直接进入可提现余额
+        user.withdrawable = (user.withdrawable or 0) + (task.node_reward or 0)
+        user.balance = (user.balance or 0) + (task.node_reward or 0)
         user.total_earned = (user.total_earned or 0) + (task.node_reward or 0)
 
     db.commit()

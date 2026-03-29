@@ -113,7 +113,7 @@ class Dispatcher:
         self.strategy = strategy or BestNodeStrategy()
 
     def get_available_nodes(self, model_id: str) -> List[PluginNode]:
-        """获取可用节点列表"""
+        """获取可用节点列表（按策略排序）"""
         from models import PluginUser
 
         # 查询数据库中 idle 的节点
@@ -154,35 +154,71 @@ class Dispatcher:
             self.db.commit()
 
         print(f"[Dispatcher] 可用节点: {[n.node_id for n in available_nodes]}")
+
+        # 按策略排序（评分高的排前面）
+        if len(available_nodes) > 1:
+            scored_nodes = [(node, self.strategy.calculate_score(node) if hasattr(self.strategy, 'calculate_score') else 50) for node in available_nodes]
+            scored_nodes.sort(key=lambda x: x[1], reverse=True)
+            available_nodes = [node for node, score in scored_nodes]
+            print(f"[Dispatcher] 排序后节点顺序: {[(n.node_id, s) for n, s in scored_nodes]}")
+
         return available_nodes
 
     def dispatch(self, task: PluginTask) -> Optional[PluginNode]:
-        """派单"""
-        # 获取可用节点
+        """派单（带分布式锁）"""
+        # 获取可用节点列表
         available_nodes = self.get_available_nodes(task.model_id)
 
         if not available_nodes:
             return None
 
-        # 使用策略选择节点
-        selected_node = self.strategy.select_node(available_nodes, task.model_id)
+        # 尝试锁定节点（按优先级顺序）
+        for node in available_nodes:
+            # 尝试获取分布式锁
+            if not redis_client.acquire_node_lock(node.node_id):
+                print(f"[Dispatcher] 节点 {node.node_id} 已被锁定，跳过")
+                continue
 
-        if selected_node:
-            # 更新任务
-            task.assigned_node_id = selected_node.node_id
-            task.assigned_time = datetime.now()
-            task.status = 'processing'
+            try:
+                # 🔒 锁定成功，再次检查节点状态（双重检查）
+                self.db.refresh(node)
+                if node.status != 'idle':
+                    print(f"[Dispatcher] 节点 {node.node_id} 状态已变为 {node.status}，跳过")
+                    continue
 
-            # 更新节点状态
-            selected_node.status = 'busy'
-            selected_node.current_task_id = task.task_id
+                ws_session = redis_client.get_ws_session(node.node_id)
+                if not ws_session:
+                    print(f"[Dispatcher] 节点 {node.node_id} WebSocket 已断开，跳过")
+                    continue
 
-            # 记录 Redis
-            redis_client.set_node_busy(selected_node.node_id, task.task_id)
+                # 确认可用，分配任务
+                task.assigned_node_id = node.node_id
+                task.assigned_time = datetime.now()
+                task.status = 'processing'
+                task.start_time = datetime.now()  # 设置开始时间
 
-            self.db.commit()
+                node.status = 'busy'
+                node.current_task_id = task.task_id
 
-        return selected_node
+                redis_client.set_node_busy(node.node_id, task.task_id)
+
+                self.db.commit()
+
+                print(f"[Dispatcher] 任务 {task.task_id} 分配给节点 {node.node_id}")
+                return node
+
+            except Exception as e:
+                print(f"[Dispatcher] 分配任务时出错: {e}")
+                self.db.rollback()
+                continue
+
+            finally:
+                # 释放锁
+                redis_client.release_node_lock(node.node_id)
+
+        # 所有节点都不可用
+        print(f"[Dispatcher] 没有可用的节点")
+        return None
 
     def release_node(self, node_id: str):
         """释放节点"""
@@ -196,7 +232,7 @@ class Dispatcher:
             redis_client.clear_node_busy(node_id)
             self.db.commit()
 
-    def update_node_score(self, node_id: str, success: bool, duration: float):
+    def update_node_score(self, node_id: str, success: bool, duration: float, reward: float = 0.07):
         """更新节点评分相关数据"""
         node = self.db.query(PluginNode).filter(
             PluginNode.node_id == node_id
@@ -226,14 +262,16 @@ class Dispatcher:
             node.today_date = today
             node.today_tasks = 0
             node.today_success = 0
+            node.today_earnings = 0.0
 
         node.today_tasks += 1
         if success:
             node.today_success += 1
 
-        # 更新收益
+        # 更新收益（使用传入的奖励值）
         if success:
-            node.total_earnings = (node.total_earnings or 0) + 0.07  # 默认奖励
+            node.total_earnings = (node.total_earnings or 0) + reward
+            node.today_earnings = (node.today_earnings or 0) + reward
 
         self.db.commit()
 

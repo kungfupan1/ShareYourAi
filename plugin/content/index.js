@@ -23,9 +23,9 @@
   let processedVideoUrls = new Set();
   let taskSubmittedTime = null;
 
-  // ============ 视频URL缓存 ============
-  window.__syaVideoUrls = [];
-  window.__syaCapturedResponses = [];
+  // ============ 视频URL缓存（由 bridge.js 维护）============
+  // window.__syaVideoUrls 和 window.__syaCapturedResponses 由 bridge.js 初始化
+  // inject.js 在 MAIN World 中拦截 fetch 请求，通过 bridge.js 存储到这里
 
   // ============ 工具函数 ============
 
@@ -45,96 +45,6 @@
       taskId: currentTask?.task_id,
       status: message
     }).catch(() => {});
-  }
-
-  // ============ 网络请求拦截 ============
-
-  const originalFetch = window.fetch;
-  window.fetch = async function(...args) {
-    const [url, options] = args;
-    const urlStr = typeof url === 'string' ? url : url.toString();
-
-    try {
-      const response = await originalFetch(...args);
-
-      const contentType = response.headers.get('content-type') || '';
-      const isVideo = urlStr.includes('.mp4') ||
-                      urlStr.includes('.webm') ||
-                      urlStr.includes('video') ||
-                      contentType.includes('video') ||
-                      contentType.includes('octet-stream');
-
-      if (isVideo) {
-        log('🎯 拦截到视频请求:', urlStr);
-        window.__syaVideoUrls.push({
-          url: urlStr,
-          time: Date.now(),
-          type: 'fetch'
-        });
-      }
-
-      if (contentType.includes('application/json')) {
-        try {
-          const clonedResponse = response.clone();
-          const data = await clonedResponse.json();
-
-          window.__syaCapturedResponses.push({
-            url: urlStr,
-            data: data,
-            time: Date.now()
-          });
-
-          const videoUrls = extractVideoUrls(data);
-          for (const vUrl of videoUrls) {
-            log('🎥 从 API 响应中发现视频 URL:', vUrl);
-            window.__syaVideoUrls.push({
-              url: vUrl,
-              time: Date.now(),
-              type: 'api'
-            });
-          }
-
-          if (window.__syaVideoUrls.length > 30) {
-            window.__syaVideoUrls = window.__syaVideoUrls.slice(-30);
-          }
-          if (window.__syaCapturedResponses.length > 10) {
-            window.__syaCapturedResponses = window.__syaCapturedResponses.slice(-10);
-          }
-        } catch (e) {}
-      }
-
-      return response;
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  // 递归提取视频URL
-  function extractVideoUrls(obj, urls = []) {
-    if (!obj) return urls;
-
-    if (typeof obj === 'string') {
-      if ((obj.includes('.mp4') || obj.includes('.webm') || obj.includes('video') || obj.includes('media'))
-          && (obj.startsWith('http') || obj.startsWith('//') || obj.startsWith('/'))) {
-        urls.push(obj);
-      }
-      return urls;
-    }
-
-    if (Array.isArray(obj)) {
-      for (const item of obj) {
-        extractVideoUrls(item, urls);
-      }
-      return urls;
-    }
-
-    if (typeof obj === 'object') {
-      for (const key of Object.keys(obj)) {
-        extractVideoUrls(obj[key], urls);
-      }
-    }
-
-    return urls;
   }
 
   // ============ Grok 自动操作 ============
@@ -1095,8 +1005,9 @@
     log('📥 开始下载视频:', videoUrl);
 
     let blob = null;
+    let actualVideoUrl = videoUrl;  // 实际可用于fallback的URL
 
-    // 尝试下载
+    // 尝试从拦截列表下载
     if (window.__syaVideoUrls && window.__syaVideoUrls.length > 0) {
       const candidateUrls = window.__syaVideoUrls
         .filter(u => {
@@ -1111,7 +1022,10 @@
             const response = await fetch(url, { mode: 'cors', credentials: 'include' });
             if (response.ok) {
               blob = await response.blob();
-              if (blob.size > 10000) break;
+              if (blob.size > 10000) {
+                actualVideoUrl = url;  // 记录可用于fallback的真实URL
+                break;
+              }
               blob = null;
             }
           } catch (e) {
@@ -1121,18 +1035,27 @@
       }
     }
 
-    if (!blob && videoUrl && !videoUrl.startsWith('blob:')) {
-      try {
-        const response = await fetch(videoUrl, { mode: 'cors', credentials: 'include' });
-        blob = await response.blob();
-      } catch (e) {}
-    }
-
-    if (!blob && videoUrl && videoUrl.startsWith('blob:')) {
-      try {
-        const response = await fetch(videoUrl);
-        blob = await response.blob();
-      } catch (e) {}
+    // 尝试下载videoUrl
+    if (!blob && videoUrl) {
+      if (videoUrl.startsWith('blob:')) {
+        // blob: URL 必须在当前页面下载，无法fallback
+        try {
+          const response = await fetch(videoUrl);
+          blob = await response.blob();
+          log('📥 从blob URL下载成功, size:', blob.size);
+        } catch (e) {
+          log('❌ blob URL下载失败:', e.message);
+        }
+      } else {
+        // https: URL 可以下载，也可以fallback给background
+        try {
+          const response = await fetch(videoUrl, { mode: 'cors', credentials: 'include' });
+          blob = await response.blob();
+          actualVideoUrl = videoUrl;
+        } catch (e) {
+          log('❌ https URL下载失败:', e.message);
+        }
+      }
     }
 
     if (!blob || blob.size < 10000) {
@@ -1141,34 +1064,21 @@
       return;
     }
 
-    // 上传视频
+    log('✅ 视频下载成功, size:', blob.size, 'type:', blob.type);
+
+    // 上传视频（直传COS）
     try {
-      updateStatus('上传中...');
-
-      const reader = new FileReader();
-      const base64Promise = new Promise((resolve) => {
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(blob);
-      });
-      const base64Data = await base64Promise;
-
-      if (!base64Data) {
-        throw new Error('base64 转换失败');
-      }
-
-      const result = await chrome.runtime.sendMessage({
-        action: 'UPLOAD_VIDEO',
-        taskId: taskId,
-        videoData: base64Data,
-        fileSize: blob.size
-      });
+      updateStatus('获取上传凭证...');
+      const result = await uploadVideoToCOS(taskId, blob, actualVideoUrl);
 
       if (!result?.success) {
         throw new Error(result?.error || '上传失败');
       }
 
       log('✅ 上传成功:', result);
+
+      // 上传成功后提交结果
+      updateStatus('提交结果中...');
 
       chrome.runtime.sendMessage({
         action: 'TASK_COMPLETE',
@@ -1180,7 +1090,7 @@
         }
       });
 
-      updateStatus('上传完成！');
+      updateStatus('任务完成！');
       isExecuting = false;
 
       // 通知 background 关闭当前标签页
@@ -1193,6 +1103,125 @@
       log('视频处理失败:', error);
       handleTaskFailed(taskId, error.message);
     }
+  }
+
+  /**
+   * 直传视频到COS（带重试机制和进度显示）
+   */
+  async function uploadVideoToCOS(taskId, blob, fallbackUrl) {
+    const maxRetries = 3;
+    let lastError = null;
+
+    // 方案1: Content Script 直传 COS
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        log(`📤 尝试直传COS (第${attempt}次)...`);
+
+        // 1. 获取预签名URL
+        updateStatus('获取上传凭证...');
+        const credential = await chrome.runtime.sendMessage({
+          action: 'GET_UPLOAD_CREDENTIAL',
+          taskId: taskId
+        });
+
+        if (!credential?.success) {
+          throw new Error(credential?.error || '获取上传凭证失败');
+        }
+
+        log('📎 获取到预签名URL');
+
+        // 2. 使用 XMLHttpRequest 上传以支持进度显示
+        updateStatus('上传中 0%');
+        const uploadResult = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          let lastPercent = 0;
+          let progressTimer = null;
+
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const percent = Math.round((event.loaded / event.total) * 100);
+              if (percent !== lastPercent) {
+                lastPercent = percent;
+                updateStatus(`上传中 ${percent}%`);
+                log(`上传进度: ${percent}%`);
+              }
+            }
+          };
+
+          // 进度卡住时显示等待提示
+          progressTimer = setInterval(() => {
+            if (lastPercent > 0 && lastPercent < 100) {
+              updateStatus(`上传中 ${lastPercent}% (网络较慢)`);
+            }
+          }, 5000);
+
+          xhr.onload = () => {
+            clearInterval(progressTimer);
+            if (xhr.status === 200) {
+              log('✅ COS直传成功');
+              updateStatus('上传完成，验证中...');
+              resolve({ success: true, result_url: credential.result_url });
+            } else {
+              reject(new Error(`COS返回 ${xhr.status}`));
+            }
+          };
+
+          xhr.onerror = () => {
+            clearInterval(progressTimer);
+            reject(new Error('网络错误'));
+          };
+
+          xhr.open('PUT', credential.presigned_url);
+          xhr.setRequestHeader('Content-Type', credential.content_type || 'video/mp4');
+          xhr.send(blob);
+        });
+
+        if (uploadResult.success) {
+          return uploadResult;
+        }
+
+      } catch (error) {
+        lastError = error;
+        log(`❌ 第${attempt}次失败:`, error.message);
+
+        // 检查是否是CSP拦截
+        if (error.message.includes('CSP') || error.message.includes('Blocked')) {
+          log('⚠️ 可能被CSP拦截，尝试fallback...');
+          break;  // 不再重试直传，直接走fallback
+        }
+
+        // 指数退避重试
+        if (attempt < maxRetries) {
+          updateStatus(`上传失败，重试中(${attempt}/${maxRetries})...`);
+          const waitTime = 2000 * attempt;
+          log(`等待 ${waitTime}ms 后重试...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+    }
+
+    // 方案2: Fallback - 让Background下载并上传（仅对https URL有效）
+    if (fallbackUrl && !fallbackUrl.startsWith('blob:')) {
+      log('🔄 尝试Fallback: 让Background中转上传...');
+      try {
+        updateStatus('上传中(中转模式)...');
+        const result = await chrome.runtime.sendMessage({
+          action: 'UPLOAD_VIDEO_FALLBACK',
+          taskId: taskId,
+          videoUrl: fallbackUrl
+        });
+        return result;
+      } catch (error) {
+        log('❌ Fallback也失败:', error.message);
+        return { success: false, error: error.message };
+      }
+    }
+
+    // blob URL无法fallback，返回错误
+    return {
+      success: false,
+      error: lastError?.message || '上传失败，且无法fallback'
+    };
   }
 
   function handleTaskFailed(taskId, error) {

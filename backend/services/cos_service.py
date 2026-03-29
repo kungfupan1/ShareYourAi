@@ -111,6 +111,48 @@ class COSService:
             print(f"获取签名URL失败: {e}")
             return None
 
+    def get_presigned_put_url(self, key: str, content_type: str = 'video/mp4',
+                               expire_seconds: int = 3600) -> Optional[dict]:
+        """
+        获取预签名PUT URL（用于前端直传）
+
+        Args:
+            key: 存储路径
+            content_type: 文件MIME类型，必须参与签名
+            expire_seconds: 过期时间（秒）
+
+        Returns:
+            {
+                'presigned_url': 'https://xxx.cos.ap-guangzhou.myqcloud.com/...',
+                'result_url': 'cos://bucket/key',
+                'expires_at': timestamp
+            }
+        """
+        if not self.client:
+            return None
+
+        try:
+            # 生成预签名PUT URL，Content-Type必须参与签名
+            url = self.client.get_presigned_url(
+                Method='PUT',
+                Bucket=self.bucket,
+                Key=key,
+                Expired=expire_seconds,
+                Headers={
+                    'Content-Type': content_type
+                }
+            )
+
+            import time
+            return {
+                'presigned_url': url,
+                'result_url': f'cos://{self.bucket}/{key}',
+                'expires_at': int(time.time()) + expire_seconds
+            }
+        except Exception as e:
+            print(f"获取预签名PUT URL失败: {e}")
+            return None
+
     def delete_file(self, key: str) -> bool:
         """删除文件"""
         if not self.client:

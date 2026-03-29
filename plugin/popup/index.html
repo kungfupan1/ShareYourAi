@@ -247,7 +247,10 @@
               <span id="panel-username">用户名</span>
               <button class="btn-more" id="btn-user-more" title="查看更多信息">更多</button>
             </div>
-            <span class="balance">余额: ¥<span id="panel-balance">0.00</span></span>
+            <div class="balance-row">
+              <span class="balance">余额: ¥<span id="panel-balance">0.00</span></span>
+              <span class="balance-auditing">审核中: ¥<span id="panel-auditing">0.00</span></span>
+            </div>
           </div>
           <button class="btn-logout" id="btn-logout">退出</button>
         </div>
@@ -290,11 +293,11 @@
         <div class="panel-stats">
           <div class="stat-item clickable" id="stat-today-tasks-item">
             <div class="stat-value" id="stat-today-tasks">0</div>
-            <div class="stat-label">今日任务</div>
+            <div class="stat-label">今日成功任务</div>
           </div>
           <div class="stat-item">
             <div class="stat-value" id="stat-today-earnings">¥0.00</div>
-            <div class="stat-label">今日收益</div>
+            <div class="stat-label">今日预估收益</div>
           </div>
         </div>
       </div>

@@ -210,8 +210,13 @@ async def get_upload_credential(
         user: PluginUser = Depends(get_current_user),
         db: Session = Depends(get_db)
 ):
-    """获取视频上传凭证"""
+    """
+    获取视频上传预签名URL（前端直传COS）
+
+    返回预签名PUT URL，Content Script可直接上传Blob到COS
+    """
     from models import PluginStorageBucket
+    from services.cos_service import get_cos_service, init_cos_service
 
     # 查找任务
     task = db.query(PluginTask).filter(PluginTask.task_id == task_id).first()
@@ -226,11 +231,50 @@ async def get_upload_credential(
     if not node:
         raise HTTPException(status_code=403, detail="无权操作此任务")
 
-    # 返回代理上传 URL（解决 CORS 问题）
+    # 获取存储桶配置
+    bucket_config = db.query(PluginStorageBucket).filter(
+        PluginStorageBucket.is_default == True
+    ).first()
+
+    if not bucket_config:
+        raise HTTPException(status_code=500, detail="未配置存储桶")
+
+    # 初始化 COS 服务
+    cos_service = get_cos_service()
+    if not cos_service:
+        init_cos_service(
+            bucket_config.secret_id,
+            bucket_config.secret_key,
+            bucket_config.bucket_name,
+            bucket_config.region
+        )
+        cos_service = get_cos_service()
+
+    if not cos_service:
+        raise HTTPException(status_code=500, detail="COS服务初始化失败")
+
+    # 生成存储路径
+    from datetime import datetime
+    now = datetime.now()
+    date_path = now.strftime("%Y/%m")
+    key = f"tasks/videos/{date_path}/{task_id}.mp4"
+
+    # 获取预签名PUT URL
+    credential = cos_service.get_presigned_put_url(
+        key=key,
+        content_type='video/mp4',
+        expire_seconds=3600
+    )
+
+    if not credential:
+        raise HTTPException(status_code=500, detail="生成上传凭证失败")
+
     return {
         "success": True,
-        "upload_url": f"http://127.0.0.1:8001/api/tasks/upload/{task_id}",
-        "result_url": f"/api/tasks/download/{task_id}"
+        "presigned_url": credential['presigned_url'],
+        "result_url": credential['result_url'],
+        "content_type": "video/mp4",
+        "expires_at": credential['expires_at']
     }
 
 
@@ -443,7 +487,8 @@ async def submit_task_result(
             dispatcher.update_node_score(
                 result.node_id,
                 success=True,
-                duration=task.duration_seconds or 0
+                duration=task.duration_seconds or 0,
+                reward=task.node_reward or 0.07
             )
 
             redis_client.incr_daily_stat("tasks_completed")

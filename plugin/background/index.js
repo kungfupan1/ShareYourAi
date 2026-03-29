@@ -4,7 +4,7 @@
 
 // ============ 环境配置 ============
 // 切换环境修改这里
-const ENV = 'production';
+const ENV = 'development';
 
 const CONFIG = {
   development: {
@@ -166,12 +166,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       submitTaskResult(message.result);
       break;
     case 'GET_UPLOAD_CREDENTIAL':
-      // 获取上传凭证
+      // 获取预签名URL
       getUploadCredential(message.taskId).then(sendResponse);
       return true;
-    case 'UPLOAD_VIDEO':
-      // 上传视频（background 有 token）
-      uploadVideo(message.taskId, message.videoData, message.fileSize).then(sendResponse);
+    case 'UPLOAD_VIDEO_FALLBACK':
+      // Fallback上传：Background下载并上传（CSP被拦截时）
+      uploadVideoFallback(message.taskId, message.videoUrl).then(sendResponse);
       return true;
     case 'TASK_COMPLETE':
       // 任务完成
@@ -373,7 +373,7 @@ async function submitTaskResult(result) {
   }
 }
 
-// 获取上传凭证
+// 获取上传凭证（预签名URL）
 async function getUploadCredential(taskId) {
   const storage = await chrome.storage.local.get(['token']);
   try {
@@ -389,49 +389,55 @@ async function getUploadCredential(taskId) {
   }
 }
 
-// 上传视频
-async function uploadVideo(taskId, base64Data, fileSize) {
+/**
+ * Fallback上传：Background下载视频URL并直传COS
+ * 用于Content Script被CSP拦截时
+ */
+async function uploadVideoFallback(taskId, videoUrl) {
   const storage = await chrome.storage.local.get(['token']);
   try {
-    console.log('开始上传视频, taskId:', taskId, 'base64Data长度:', base64Data?.length, 'fileSize:', fileSize);
+    console.log('[Fallback] 开始下载视频:', videoUrl);
 
-    if (!base64Data) {
-      return { success: false, error: '没有视频数据' };
+    // 1. 下载视频
+    const downloadResponse = await fetch(videoUrl);
+    if (!downloadResponse.ok) {
+      throw new Error(`下载失败: ${downloadResponse.status}`);
     }
 
-    // 将 base64 转换为 Blob
-    const response = await fetch(base64Data);
-    const blob = await response.blob();
-    console.log('Blob 大小:', blob.size, '类型:', blob.type);
+    const blob = await downloadResponse.blob();
+    console.log('[Fallback] 下载完成, size:', blob.size);
 
-    if (blob.size === 0) {
-      return { success: false, error: 'Blob 大小为 0' };
+    if (blob.size < 10000) {
+      throw new Error('视频文件太小，可能下载不完整');
     }
 
-    // 创建 FormData
-    const formData = new FormData();
-    formData.append('file', blob, `${taskId}.mp4`);
+    // 2. 获取预签名URL
+    const credential = await getUploadCredential(taskId);
+    if (!credential?.success) {
+      throw new Error(credential?.error || '获取上传凭证失败');
+    }
 
-    // 上传
-    const uploadResponse = await fetch(`${API_BASE}/tasks/upload/${taskId}`, {
-      method: 'POST',
+    // 3. 上传到COS
+    const uploadResponse = await fetch(credential.presigned_url, {
+      method: 'PUT',
+      body: blob,
       headers: {
-        'Authorization': `Bearer ${storage.token}`
-      },
-      body: formData
+        'Content-Type': credential.content_type || 'video/mp4'
+      }
     });
 
     if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      console.error('上传失败:', errorText);
-      return { success: false, error: `上传失败: ${uploadResponse.status}` };
+      throw new Error(`COS上传失败: ${uploadResponse.status}`);
     }
 
-    const result = await uploadResponse.json();
-    console.log('上传成功:', result);
-    return { success: true, result_url: result.result_url };
+    console.log('[Fallback] 上传成功');
+    return {
+      success: true,
+      result_url: credential.result_url
+    };
+
   } catch (error) {
-    console.error('上传视频失败:', error);
+    console.error('[Fallback] 失败:', error);
     return { success: false, error: error.message };
   }
 }
@@ -582,7 +588,7 @@ setInterval(async () => {
   }
 }, 30000);  // 每30秒检查一次
 
-// 发送心跳
+// 发送心跳（每25秒，配合Redis TTL 60秒）
 setInterval(async () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     const storage = await chrome.storage.local.get(['token', 'nodeId']);
@@ -602,6 +608,6 @@ setInterval(async () => {
       }
     }
   }
-}, 30000);
+}, 25000);
 
 console.log('Background Service Worker 已启动');

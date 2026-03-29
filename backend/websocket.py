@@ -51,6 +51,7 @@ manager = ConnectionManager()
 
 async def websocket_endpoint(websocket: WebSocket, token: str, node_id: str):
     """WebSocket 端点"""
+    print(f"[WebSocket] 收到连接请求: node_id={node_id}")
     db = SessionLocal()
     node = None
     heartbeat_task = None
@@ -59,6 +60,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str, node_id: str):
         # 验证 token
         user_id = redis_client.client.get(f"token:{token}")
         if not user_id:
+            print(f"[WebSocket] Token无效，拒绝连接")
             await websocket.close(code=4001, reason="认证失败")
             return
 
@@ -169,6 +171,9 @@ async def handle_message(db: Session, node: PluginNode, data: dict):
         # 心跳响应
         node.last_heartbeat = datetime.now()
         db.commit()
+
+        # 刷新 Redis WebSocket 会话 TTL（60秒）
+        redis_client.refresh_ws_session(node.node_id, ttl=60)
 
     elif msg_type == 'status_update':
         # 状态更新

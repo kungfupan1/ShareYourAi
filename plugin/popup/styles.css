@@ -7,7 +7,7 @@
 
 body {
   width: 380px;
-  min-height: 520px;
+  min-height: 600px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: #ffffff;
 }
@@ -15,7 +15,7 @@ body {
 #app {
   display: flex;
   flex-direction: column;
-  min-height: 520px;
+  min-height: 600px;
 }
 
 /* ============ 小人容器 - 左上角布局 ============ */
@@ -621,8 +621,27 @@ body {
 
 .user-info .balance {
   color: #10B981;
-  font-size: 12px;
-  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.balance-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-top: 4px;
+}
+
+.balance-row .balance,
+.balance-row .balance-auditing {
+  display: inline-flex;
+  align-items: center;
+}
+
+.balance-auditing {
+  color: #F59E0B;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .btn-more {
@@ -992,11 +1011,11 @@ body {
 
 /* 展开状态 - 当有任务执行时 */
 body.task-expanded {
-  min-height: 620px;
+  min-height: 720px;
 }
 
 #app.task-expanded {
-  min-height: 620px;
+  min-height: 720px;
 }
 
 /* 任务历史列表样式 */
@@ -1040,6 +1059,13 @@ body.task-expanded {
 
 .task-history-model {
   margin-bottom: 4px;
+}
+
+.task-history-prompt {
+  color: #333;
+  margin-bottom: 4px;
+  word-break: break-all;
+  line-height: 1.4;
 }
 
 .task-history-time {

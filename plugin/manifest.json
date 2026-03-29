@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "ShareYourAi",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "分布式 AI 内容生成节点调度平台",
   "permissions": [
     "storage",
     "activeTab",
     "tabs",
     "notifications",
-    "scripting"
+    "scripting",
+    "webRequest"
   ],
   "host_permissions": [
     "https://grok.com/*",
@@ -20,7 +21,8 @@
     "http://127.0.0.1:8000/*",
     "http://127.0.0.1:8001/*",
     "http://shareyouai.winepipeline.com:8082/*",
-    "https://shareyouai.winepipeline.com/*"
+    "https://shareyouai.winepipeline.com/*",
+    "https://*.myqcloud.com/*"
   ],
   "action": {
     "default_popup": "popup/index.html",
@@ -41,8 +43,14 @@
         "https://sora.com/*",
         "https://runwayml.com/*"
       ],
-      "js": ["content/index.js"],
+      "js": ["content/bridge.js", "content/index.js"],
       "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content/inject.js"],
+      "matches": ["https://grok.com/*", "https://sora.com/*", "https://runwayml.com/*"]
     }
   ],
   "icons": {
