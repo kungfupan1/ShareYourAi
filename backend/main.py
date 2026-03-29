@@ -7,7 +7,8 @@ from contextlib import asynccontextmanager
 import os
 
 from database import engine, Base
-from routers import auth, nodes, tasks, admin
+from routers import auth, nodes, tasks, admin, platform
+from routers.v1 import router as v1_router
 from websocket import websocket_endpoint
 
 # 创建数据库表
@@ -191,6 +192,8 @@ app.include_router(auth.router)
 app.include_router(nodes.router)
 app.include_router(tasks.router)
 app.include_router(admin.router)
+app.include_router(platform.router)
+app.include_router(v1_router, prefix="/api/v1")
 
 
 # WebSocket 端点

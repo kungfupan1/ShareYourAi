@@ -258,3 +258,167 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+# ============ 平台客户相关 ============
+class PlatformClientCreate(BaseModel):
+    client_name: str = Field(..., min_length=2, max_length=100)
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
+    callback_url: Optional[str] = None
+    ip_whitelist: Optional[List[str]] = None
+
+
+class PlatformClientUpdate(BaseModel):
+    client_name: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
+    callback_url: Optional[str] = None
+    ip_whitelist: Optional[List[str]] = None
+    status: Optional[str] = None  # active/suspended/disabled
+
+
+class PlatformClientResponse(BaseModel):
+    id: int
+    client_id: str
+    client_name: str
+    api_key: str  # 脱敏显示
+    balance: float
+    frozen_balance: float
+    contact_name: Optional[str]
+    contact_phone: Optional[str]
+    contact_email: Optional[str]
+    status: str
+    total_calls: int
+    total_spent: float
+    total_recharged: float
+    callback_url: Optional[str]
+    create_time: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PlatformClientDetail(PlatformClientResponse):
+    ip_whitelist: Optional[List[str]] = None
+
+
+class BalanceAdjustRequest(BaseModel):
+    amount: float = Field(..., gt=0)
+    adjust_type: str = Field(..., pattern=r'^(add|subtract)$')
+    remark: str = Field(..., min_length=2, max_length=500)
+
+
+class RechargeRequest(BaseModel):
+    amount: float = Field(..., gt=0)
+    remark: Optional[str] = None
+
+
+class ClientTransactionResponse(BaseModel):
+    id: int
+    transaction_id: str
+    client_id: str
+    type: str
+    amount: float
+    balance_before: float
+    balance_after: float
+    related_task_id: Optional[str]
+    remark: Optional[str]
+    operator_id: Optional[int]
+    create_time: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ClientCallLogResponse(BaseModel):
+    id: int
+    log_id: str
+    client_id: str
+    task_id: Optional[str]
+    model_id: Optional[str]
+    action: str
+    status: Optional[str]
+    cost: Optional[float]
+    ip_address: Optional[str]
+    error_message: Optional[str]
+    response_time: Optional[int]
+    create_time: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ============ 对外 API 相关 ============
+class ExternalTaskSubmit(BaseModel):
+    """外部API任务提交请求"""
+    model_id: str
+    prompt: str = Field(..., min_length=1, max_length=2000)
+    images: Optional[List[str]] = None  # base64 图片列表
+    params: Optional[dict] = None
+    callback_url: Optional[str] = None
+    external_id: Optional[str] = Field(None, max_length=100)
+
+
+class ExternalTaskResponse(BaseModel):
+    """外部API任务响应"""
+    success: bool
+    task_id: Optional[str] = None
+    estimated_time: Optional[int] = None  # 预估完成时间（秒）
+    cost: Optional[float] = None
+    error: Optional[str] = None
+    error_code: Optional[str] = None
+
+
+class ExternalTaskDetail(BaseModel):
+    """外部API任务详情"""
+    task_id: str
+    status: str
+    model_id: str
+    prompt: Optional[str]
+    result_url: Optional[str]
+    duration: Optional[int]
+    file_size: Optional[int]
+    created_at: Optional[datetime]
+    completed_at: Optional[datetime]
+
+
+class ExternalTaskQueryResponse(BaseModel):
+    """外部API任务查询响应"""
+    success: bool
+    task: Optional[ExternalTaskDetail] = None
+    error: Optional[str] = None
+    error_code: Optional[str] = None
+
+
+class ExternalAccountInfo(BaseModel):
+    """外部API账户信息"""
+    client_id: str
+    client_name: str
+    balance: float
+    frozen_balance: float
+    total_calls: int
+    total_spent: float
+
+
+class ExternalAccountResponse(BaseModel):
+    """外部API账户查询响应"""
+    success: bool
+    account: Optional[ExternalAccountInfo] = None
+
+
+class ExternalModelInfo(BaseModel):
+    """外部API模型信息"""
+    model_id: str
+    name: str
+    description: Optional[str]
+    price: float
+    params: Optional[dict] = None
+
+
+class ExternalModelsResponse(BaseModel):
+    """外部API模型列表响应"""
+    success: bool
+    models: List[ExternalModelInfo] = []

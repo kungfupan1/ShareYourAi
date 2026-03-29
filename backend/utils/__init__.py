@@ -50,6 +50,35 @@ def generate_task_id() -> str:
     return f"T{timestamp}{random_part}"
 
 
+def generate_client_id() -> str:
+    """生成平台客户 ID"""
+    import time
+    timestamp = int(time.time() * 1000) % 100000000
+    random_part = random.randint(1000, 9999)
+    return f"CLIENT-{timestamp}{random_part}"
+
+
+def generate_api_key() -> str:
+    """生成 API Key (sk_ 前缀 + 32位随机字符)"""
+    return f"sk_{secrets.token_urlsafe(32)}"
+
+
+def generate_transaction_id() -> str:
+    """生成交易 ID"""
+    import time
+    timestamp = int(time.time() * 1000) % 100000000
+    random_part = random.randint(1000, 9999)
+    return f"TXN{timestamp}{random_part}"
+
+
+def generate_log_id() -> str:
+    """生成日志 ID"""
+    import time
+    timestamp = int(time.time() * 1000) % 100000000
+    random_part = random.randint(1000, 9999)
+    return f"LOG{timestamp}{random_part}"
+
+
 # ============ 验证码相关 ============
 def generate_code(length: int = 6) -> str:
     """生成数字验证码"""

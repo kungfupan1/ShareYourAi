@@ -70,6 +70,11 @@
           <span>风控中心</span>
         </el-menu-item>
 
+        <el-menu-item index="/platforms">
+          <el-icon><Connection /></el-icon>
+          <span>平台客户</span>
+        </el-menu-item>
+
         <el-menu-item index="/settings">
           <el-icon><Tools /></el-icon>
           <span>系统配置</span>
@@ -120,7 +125,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Odometer, User, Monitor, Setting, Aim, List,
   Coin, Wallet, FolderOpened, Warning, Tools,
-  Fold, Expand, UserFilled, VideoPlay
+  Fold, Expand, UserFilled, VideoPlay, Connection
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 

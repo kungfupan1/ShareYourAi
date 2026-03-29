@@ -72,6 +72,11 @@ const routes = [
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/SystemConfig.vue')
+      },
+      {
+        path: 'platforms',
+        name: 'Platforms',
+        component: () => import('@/views/PlatformClient.vue')
       }
     ]
   }

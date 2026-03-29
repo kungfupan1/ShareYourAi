@@ -180,6 +180,7 @@ class PluginTask(Base):
     source_system = Column(String(50), default='hi-tom-ai')
     source_user_id = Column(Integer)
     source_order_id = Column(String(50))
+    source_client_id = Column(String(50))  # 来源平台ID（外部API调用时）
 
     # 模型
     model_id = Column(String(50), ForeignKey("plugin_models.model_id"))
@@ -354,3 +355,99 @@ class PluginSystemConfig(Base):
 
     create_time = Column(DateTime, server_default=func.now())
     update_time = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class PlatformClient(Base):
+    """平台客户表 - 外部接入的视频生成平台"""
+    __tablename__ = "platform_clients"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(String(50), unique=True, nullable=False, index=True)  # 平台ID，如 CLIENT-ABC123
+    client_name = Column(String(100), nullable=False)  # 平台名称
+    api_key = Column(String(100), unique=True, nullable=False, index=True)  # API密钥
+
+    # 账户信息
+    balance = Column(Float, default=0.0)  # 账户余额
+    frozen_balance = Column(Float, default=0.0)  # 冻结金额（预扣费）
+
+    # 联系信息
+    contact_name = Column(String(50))  # 联系人
+    contact_phone = Column(String(20))  # 联系电话
+    contact_email = Column(String(100))  # 联系邮箱
+
+    # 状态
+    status = Column(String(20), default='active')  # active/suspended/disabled
+
+    # 统计
+    total_calls = Column(Integer, default=0)  # 累计调用次数
+    total_spent = Column(Float, default=0.0)  # 累计消费金额
+    total_recharged = Column(Float, default=0.0)  # 累计充值金额
+
+    # 安全配置
+    ip_whitelist = Column(Text)  # IP白名单（JSON数组）
+
+    # 回调配置
+    callback_url = Column(String(500))  # 默认回调地址
+    callback_retry_count = Column(Integer, default=0)  # 回调重试次数
+
+    create_time = Column(DateTime, server_default=func.now())
+    update_time = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # 关联
+    transactions = relationship("ClientTransaction", back_populates="client")
+    call_logs = relationship("ClientCallLog", back_populates="client")
+
+
+class ClientTransaction(Base):
+    """平台交易记录表"""
+    __tablename__ = "client_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    transaction_id = Column(String(50), unique=True, nullable=False, index=True)  # 交易ID
+    client_id = Column(String(50), ForeignKey("platform_clients.client_id"), nullable=False, index=True)
+
+    # 交易信息
+    type = Column(String(20), nullable=False)  # recharge/consume/refund/adjust
+    amount = Column(Float, nullable=False)  # 金额（正数加，负数减）
+    balance_before = Column(Float, nullable=False)  # 变动前余额
+    balance_after = Column(Float, nullable=False)  # 变动后余额
+
+    # 关联信息
+    related_task_id = Column(String(50))  # 关联任务ID（消费时）
+
+    # 备注
+    remark = Column(String(500))
+    operator_id = Column(Integer)  # 操作人ID（管理员操作时）
+
+    create_time = Column(DateTime, server_default=func.now())
+
+    # 关联
+    client = relationship("PlatformClient", back_populates="transactions")
+
+
+class ClientCallLog(Base):
+    """平台调用日志表"""
+    __tablename__ = "client_call_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    log_id = Column(String(50), unique=True, nullable=False, index=True)  # 日志ID
+    client_id = Column(String(50), ForeignKey("platform_clients.client_id"), nullable=False, index=True)
+
+    # 调用信息
+    task_id = Column(String(50), index=True)  # 任务ID
+    model_id = Column(String(50))  # 模型ID
+    action = Column(String(50), nullable=False)  # 操作：submit/query/cancel/info
+    status = Column(String(20))  # 调用状态：success/failed
+    cost = Column(Float)  # 扣费金额
+
+    # 请求信息
+    ip_address = Column(String(50))  # 调用IP
+    user_agent = Column(String(500))  # 客户端标识
+    request_params = Column(Text)  # 请求参数（脱敏）
+    error_message = Column(Text)  # 错误信息
+    response_time = Column(Integer)  # 响应时间（毫秒）
+
+    create_time = Column(DateTime, server_default=func.now())
+
+    # 关联
+    client = relationship("PlatformClient", back_populates="call_logs")
