@@ -27,7 +27,15 @@ cd admin-web
 npm install
 npm run dev                 # Development server
 npm run build               # Production build
+npm run preview             # Preview production build locally
 ```
+
+### Docker (Production)
+```bash
+docker-compose up -d        # Start all services (Redis, Backend, Nginx)
+docker-compose down         # Stop all services
+```
+Services: Redis (cache), Backend (port 8000), Nginx (port 8080 for admin-web)
 
 ### Plugin (Chrome Extension)
 Load the `plugin/` directory as an unpacked extension in Chrome. No build step required.
@@ -35,8 +43,8 @@ Load the `plugin/` directory as an unpacked extension in Chrome. No build step r
 ## Architecture
 
 ### Backend Structure (`backend/`)
-- `main.py` - FastAPI app entry point, CORS config, router registration
-- `database.py` - SQLAlchemy setup with SQLite (`shareyourai.db`)
+- `main.py` - FastAPI app entry point, CORS config, router registration. Built-in API docs at `/docs`
+- `database.py` - SQLAlchemy setup with SQLite (`shareyourai.db` locally, `share_you_ai.db` in Docker)
 - `redis_client.py` - Redis client for task queues, node status, sessions
 - `models.py` - All SQLAlchemy models (PluginUser, PluginNode, PluginTask, etc.)
 - `schemas.py` - Pydantic schemas for request/response validation
@@ -46,6 +54,8 @@ Load the `plugin/` directory as an unpacked extension in Chrome. No build step r
   - `tasks.py` - Task submission, results, external API
   - `admin.py` - Admin dashboard, user/node/model management
 - `websocket.py` - WebSocket connection manager for real-time node communication
+- `services/` - External service integrations:
+  - `cos_service.py` - Tencent COS cloud storage (file upload, signed URLs)
 - `engines/`:
   - `dispatcher.py` - Task dispatch with random or best-node strategies
   - `validator.py` - Task result validation (anti-cheat)
@@ -59,8 +69,9 @@ Load the `plugin/` directory as an unpacked extension in Chrome. No build step r
 ### Plugin Structure (`plugin/`)
 - Chrome Extension Manifest V3
 - `background/index.js` - Service worker handling task routing and API communication
-- `content/index.js` - Content script that intercepts fetch requests on AI pages (Grok, Sora, Runway) to capture proof data
+- `content/index.js` - Content script that intercepts fetch requests on AI pages to capture proof data
 - `popup/` - Extension popup UI
+- Supported AI platforms: `grok.com`, `sora.com`, `runwayml.com` (configured in manifest.json)
 
 ## Key Concepts
 
