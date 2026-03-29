@@ -20,8 +20,21 @@ async def lifespan(app: FastAPI):
     # 启动时初始化
     print("ShareYourAi Backend 启动中...")
 
-    # 初始化 COS 服务
+    # 将所有节点状态重置为 offline（服务器重启后没有 WebSocket 连接）
     from database import SessionLocal
+    from models import PluginNode
+
+    db = SessionLocal()
+    try:
+        db.query(PluginNode).update({"status": "offline"})
+        db.commit()
+        print("所有节点状态已重置为 offline")
+    except Exception as e:
+        print(f"重置节点状态失败: {e}")
+    finally:
+        db.close()
+
+    # 初始化 COS 服务
     from models import PluginStorageBucket
     from services.cos_service import init_cos_service
 
