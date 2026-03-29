@@ -69,6 +69,52 @@ async def lifespan(app: FastAPI):
         init_email_service(smtp_server, smtp_port, smtp_user, smtp_password)
         print("邮件服务已初始化")
 
+    # 启动任务超时检查定时任务
+    import asyncio
+    async def check_timeout_tasks():
+        """定时检查超时任务"""
+        from models import PluginTask
+        from engines.dispatcher import Dispatcher
+        while True:
+            await asyncio.sleep(60)  # 每60秒检查一次
+            try:
+                db = SessionLocal()
+                # 查找 processing 状态超过 5 分钟的任务
+                from datetime import datetime, timedelta
+                timeout_threshold = datetime.now() - timedelta(minutes=5)
+
+                timeout_tasks = db.query(PluginTask).filter(
+                    PluginTask.status == 'processing',
+                    PluginTask.start_time < timeout_threshold
+                ).all()
+
+                for task in timeout_tasks:
+                    print(f"[超时检查] 任务 {task.task_id} 超时，标记为失败")
+                    task.status = 'timeout'
+                    task.error_message = "任务执行超时"
+                    task.end_time = datetime.now()
+
+                    if task.start_time:
+                        task.duration_seconds = int((task.end_time - task.start_time).total_seconds())
+
+                    # 释放节点
+                    if task.assigned_node_id:
+                        dispatcher = Dispatcher(db)
+                        dispatcher.release_node(task.assigned_node_id)
+                        dispatcher.update_node_score(task.assigned_node_id, success=False, duration=0)
+
+                    db.commit()
+                db.close()
+            except Exception as e:
+                print(f"[超时检查] 检查失败: {e}")
+                try:
+                    db.close()
+                except:
+                    pass
+
+    asyncio.create_task(check_timeout_tasks())
+    print("任务超时检查已启动（超时时间：5分钟）")
+
     yield
 
     # 关闭时清理

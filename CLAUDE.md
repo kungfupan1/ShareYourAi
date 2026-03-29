@@ -34,11 +34,20 @@ npm run preview             # Preview production build locally
 ```bash
 docker-compose up -d        # Start all services (Redis, Backend, Nginx)
 docker-compose down         # Stop all services
+docker-compose build        # Rebuild backend image after code changes
 ```
-Services: Redis (cache), Backend (port 8000), Nginx (port 8080 for admin-web)
+Services: Redis (cache), Backend (port 8000), Nginx (port 8082 for admin-web)
+
+**Note**: Backend startup resets all node statuses to `offline` since no WebSocket connections exist after restart.
 
 ### Plugin (Chrome Extension)
 Load the `plugin/` directory as an unpacked extension in Chrome. No build step required.
+
+**Environment switching**: Change `ENV` constant in both files:
+- `plugin/background/index.js` (line 7)
+- `plugin/config.js` (line 7)
+
+Options: `'development'` (localhost:8000) or `'production'` (shareyouai.winepipeline.com:8082)
 
 ## Architecture
 
@@ -61,10 +70,11 @@ Load the `plugin/` directory as an unpacked extension in Chrome. No build step r
   - `validator.py` - Task result validation (anti-cheat)
 
 ### Frontend Structure (`admin-web/src/`)
-- Vue 3 + Vue Router + Pinia + Element Plus
+- Vue 3 + Vue Router + Pinia + Element Plus + ECharts
 - `views/` - Dashboard, UserManage, NodeManage, ModelManage, TaskManage, EarningAudit, WithdrawalManage, StrategyConfig, RiskControl, SystemConfig, StorageConfig, TestGenerator (for simulating task submissions)
 - `api/` - HTTP request wrappers for backend API calls
 - `stores/auth.js` - Authentication state management
+- `router/index.js` - Route definitions with auth guard
 
 ### Plugin Structure (`plugin/`)
 - Chrome Extension Manifest V3
@@ -120,6 +130,15 @@ Backend supports these optional environment variables:
 - `REDIS_URL` - Redis connection URL (default: `redis://localhost:6379/0`)
 - `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` - Email service for verification codes
 
+## Health Check
+
+Backend endpoint: `/health` - Returns `{"status": "healthy", "service": "ShareYourAi Backend"}`
+
+## Upload Limits
+
+- Nginx: `client_max_body_size 50M` (configured in nginx.conf)
+- COS credentials: 5-minute expiry, bound to task_id
+
 ## API Authentication
 
 - User endpoints: Bearer token in Authorization header
@@ -172,4 +191,4 @@ COS service in `backend/services/cos_service.py` handles:
 - File validation via HTTP Range requests (file header inspection)
 - Signed URLs for result access
 
-Configure via `plugin_storage_buckets` table.
+Configure via `plugin_storage_buckets` table. If no default bucket configured, falls back to local `/uploads` directory.

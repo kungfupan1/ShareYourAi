@@ -2,8 +2,8 @@
  * ShareYourAi 插件主程序
  */
 
-// API 基础地址
-const API_BASE = 'http://127.0.0.1:8000/api';
+// API 基础地址（从 config.js 获取）
+const API_BASE = config.API_BASE;
 
 // 状态
 let token = null;
@@ -423,9 +423,7 @@ function updatePlatformDisplay() {
 // 更新当前任务显示
 async function updateCurrentTask() {
   try {
-    console.log('popup: 正在请求任务...');
     const task = await chrome.runtime.sendMessage({ action: 'GET_TASK' });
-    console.log('popup 收到任务:', task);
 
     const taskCard = document.getElementById('task-card');
 
@@ -447,7 +445,7 @@ async function updateCurrentTask() {
       document.getElementById('app').classList.remove('task-expanded');
     }
   } catch (error) {
-    console.error('获取当前任务失败:', error);
+    // 静默失败，不打印日志
   }
 }
 
@@ -608,16 +606,5 @@ function connectWebSocket() {
   setTimeout(updateWsStatus, 1000);
 }
 
-// 心跳（通过 background）
-setInterval(() => {
-  if (ws && ws.readyState === WebSocket.OPEN && nodeId) {
-    fetch(`${API_BASE}/nodes/heartbeat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ node_id: nodeId })
-    });
-  }
-}, 30000);
+// 定期更新连接状态显示
+setInterval(updateWsStatus, 3000);

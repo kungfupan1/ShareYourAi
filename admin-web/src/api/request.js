@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const request = axios.create({
   baseURL: '/api',
-  timeout: 30000
+  timeout: 60000  // 1分钟
 })
 
 // 请求拦截器

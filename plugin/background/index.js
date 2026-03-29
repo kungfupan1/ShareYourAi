@@ -2,9 +2,23 @@
  * Background Service Worker
  */
 
-// API 基础地址
-const API_BASE = 'http://127.0.0.1:8000/api';
-const WS_URL = 'ws://127.0.0.1:8000/ws';
+// ============ 环境配置 ============
+// 切换环境修改这里
+const ENV = 'production';
+
+const CONFIG = {
+  development: {
+    API_BASE: 'http://127.0.0.1:8000/api',
+    WS_URL: 'ws://127.0.0.1:8000/ws'
+  },
+  production: {
+    API_BASE: 'https://shareyouai.winepipeline.com/api',
+    WS_URL: 'wss://shareyouai.winepipeline.com/ws'
+  }
+};
+
+const API_BASE = CONFIG[ENV].API_BASE;
+const WS_URL = CONFIG[ENV].WS_URL;
 
 let ws = null;
 let reconnectTimer = null;
@@ -187,7 +201,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
     case 'GET_TASK':
       chrome.storage.local.get(['currentTask'], (result) => {
-        console.log('GET_TASK 请求，当前任务:', result.currentTask);
         sendResponse(result.currentTask);
       });
       return true;
@@ -229,8 +242,16 @@ async function handleNewTask(task) {
   console.log('处理新任务:', task);
   currentTask = task;
 
-  // 存储到 chrome.storage
-  await chrome.storage.local.set({ currentTask: task });
+  // 存储到 chrome.storage（不包含 images 大数据，避免超出配额）
+  const taskForStorage = {
+    task_id: task.task_id,
+    model_id: task.model_id,
+    prompt: task.prompt,
+    page_url: task.page_url,
+    params: task.params,
+    create_time: task.create_time || new Date().toISOString()
+  };
+  await chrome.storage.local.set({ currentTask: taskForStorage });
 
   // 显示通知和徽章
   showNotification('ShareYourAi', `开始执行任务: ${task.prompt?.substring(0, 30)}...`);
@@ -255,7 +276,7 @@ async function handleNewTask(task) {
       // 存储当前任务标签页ID
       await chrome.storage.local.set({ currentTaskTabId: targetTab.id });
 
-      // 等待页面加载完成
+      // 等待页面加载完成（最多30秒）
       await new Promise(resolve => {
         if (targetTab.status === 'complete') {
           resolve();
@@ -267,37 +288,44 @@ async function handleNewTask(task) {
             }
           };
           chrome.tabs.onUpdated.addListener(listener);
-          setTimeout(resolve, 10000); // 超时保护
+          setTimeout(resolve, 30000); // 增加超时时间到30秒
         }
       });
 
-      // 额外等待 content script 注入
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // 额外等待页面稳定和VPN翻墙（增加到5秒）
+      console.log('页面加载完成，等待5秒让页面稳定...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
-      // 发送任务给 content script
+      // 发送任务给 content script（使用完整的 task，包含 images）
       console.log('发送 START_TASK 给 content script');
-      try {
-        const response = await chrome.tabs.sendMessage(targetTab.id, {
-          action: 'START_TASK',
-          task: task
-        });
-        console.log('Content script 响应:', response);
-      } catch (error) {
-        console.error('发送任务失败，尝试注入 content script:', error);
+      let sent = false;
+      for (let i = 0; i < 5 && !sent; i++) {
         try {
-          await chrome.scripting.executeScript({
-            target: { tabId: targetTab.id },
-            files: ['content/index.js']
-          });
-          await new Promise(resolve => setTimeout(resolve, 500));
-          const retryResponse = await chrome.tabs.sendMessage(targetTab.id, {
+          const response = await chrome.tabs.sendMessage(targetTab.id, {
             action: 'START_TASK',
-            task: task
+            task: task  // 完整任务数据（内存中的，包含 images）
           });
-          console.log('重试发送成功:', retryResponse);
-        } catch (e) {
-          console.error('注入或重试失败:', e);
+          console.log('Content script 响应:', response);
+          sent = true;
+        } catch (error) {
+          console.log(`第${i + 1}次发送失败，尝试注入 content script:`, error.message);
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: targetTab.id },
+              files: ['content/index.js']
+            });
+            // 每次重试等待更长时间
+            await new Promise(resolve => setTimeout(resolve, 2000 + i * 1000));
+          } catch (e) {
+            console.error('注入失败:', e);
+          }
         }
+      }
+
+      if (!sent) {
+        console.error('多次重试后仍无法发送任务');
+        showNotification('ShareYourAi', '任务发送失败，请检查VPN连接', 'error');
+        updateBadge('失败', '#F44336');
       }
     } catch (error) {
       console.error('新建标签页失败:', error);
@@ -514,17 +542,45 @@ async function checkTaskStatusFromBackend(taskId) {
   return { status: null };
 }
 
-// 定时清理过期数据
+// 定时清理过期数据和检查任务状态
 setInterval(async () => {
-  const result = await chrome.storage.local.get(['currentTask']);
+  const result = await chrome.storage.local.get(['currentTask', 'token']);
   if (result.currentTask) {
-    const taskTime = new Date(result.currentTask.create_time);
+    const task = result.currentTask;
+    const taskTime = new Date(task.create_time || task.start_time);
     const now = new Date();
+
+    // 1小时过期的任务，直接清理
     if (now - taskTime > 3600000) {
+      console.log('[清理] 任务已过期1小时，清理:', task.task_id);
       await chrome.storage.local.remove(['currentTask']);
+      currentTask = null;
+      updateBadge('', '#4CAF50');
+      return;
+    }
+
+    // 检查后端任务状态，如果已结束则清理本地任务
+    try {
+      const response = await fetch(`${API_BASE}/tasks/status/${task.task_id}`, {
+        headers: {
+          'Authorization': `Bearer ${result.token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // 如果任务状态不是 pending 或 processing，说明已结束
+        if (data.status && data.status !== 'pending' && data.status !== 'processing') {
+          console.log('[清理] 后端任务已结束:', data.status, '清理本地任务:', task.task_id);
+          await chrome.storage.local.remove(['currentTask']);
+          currentTask = null;
+          updateBadge('', '#4CAF50');
+        }
+      }
+    } catch (error) {
+      console.error('[清理] 检查任务状态失败:', error);
     }
   }
-}, 60000);
+}, 30000);  // 每30秒检查一次
 
 // 发送心跳
 setInterval(async () => {
