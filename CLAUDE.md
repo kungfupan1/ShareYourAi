@@ -25,10 +25,12 @@ Default admin credentials: `admin` / `admin123`
 ```bash
 cd admin-web
 npm install
-npm run dev                 # Development server
+npm run dev                 # Development server (port 8081)
 npm run build               # Production build
 npm run preview             # Preview production build locally
 ```
+
+Dev server (vite.config.js) proxies `/api` → `http://localhost:8000` and `/ws` → `ws://localhost:8000`. API requests use `baseURL: '/api'` via axios (`src/api/request.js`).
 
 ### Docker (Production)
 ```bash
@@ -62,11 +64,17 @@ Note: Production uses HTTPS/WSS, development uses HTTP/WS.
 - `routers/` - API endpoints:
   - `auth.py` - User registration, login, JWT tokens
   - `nodes.py` - Node registration, heartbeat, status management
-  - `tasks.py` - Task submission, results, external API
+  - `tasks.py` - Task submission, results, legacy external API
   - `admin.py` - Admin dashboard, user/node/model management
+  - `platform.py` - Platform client management (admin)
+  - `v1/external.py` - External API v1 for platform clients
+- `middleware/`:
+  - `api_key.py` - API Key header authentication for external API
 - `websocket.py` - WebSocket connection manager for real-time node communication
 - `services/` - External service integrations:
   - `cos_service.py` - Tencent COS cloud storage (file upload, signed URLs)
+  - `billing.py` - Platform client billing (balance freeze, deduction, refund)
+- `utils/` - Shared utilities (`__init__.py`): ID generators (task, node, client, API key), password hashing (bcrypt), email service, file type detection, time helpers
 - `engines/`:
   - `dispatcher.py` - Task dispatch with random or best-node strategies
   - `validator.py` - Task result validation (anti-cheat)
@@ -124,6 +132,9 @@ Key tables and their relationships:
 - `plugin_models` - AI model configurations (node_reward, user_price, validation rules)
 - `plugin_withdrawals` - Withdrawal records
 - `plugin_risk_logs` - Risk control records
+- `platform_clients` - External platforms consuming the API (balance, frozen_balance, api_key)
+- `client_transactions` - Platform transaction records (recharge/consume/refund/adjust)
+- `client_call_logs` - Platform API call logs
 
 Default models initialized by `init_db.py`:
 - `grok_video` - Grok 视频生成 (node_reward: 0.07)
@@ -155,13 +166,31 @@ FastAPI lifespan in `main.py` runs two background tasks:
 
 - User endpoints: Bearer token in Authorization header
 - Admin endpoints: `user_id` query parameter (simplified auth for admin panel)
-- External API: `api_key` query parameter validated against `external_api_key` system config
+- External API v1: `X-API-Key` header validated against `platform_clients.api_key`
 
 ### External API Endpoints
 
-For demand-side systems (e.g., Hi-Tom-AI):
-- `POST /api/tasks/external/submit?api_key=xxx` - Submit task from external system
-- `GET /api/tasks/external/status/{task_id}?api_key=xxx` - Query task status and result URL
+Two versions of external API exist:
+
+**Legacy External API** (deprecated, uses query parameter):
+- `POST /api/tasks/external/submit?api_key=xxx` - Submit task
+- `GET /api/tasks/external/status/{task_id}?api_key=xxx` - Query task status
+
+**External API v1** (recommended, uses header authentication):
+Base URL: `/api/v1`, Authentication: `X-API-Key: sk_xxx` header
+
+- `POST /api/v1/tasks/submit` - Submit task from external platform
+- `GET /api/v1/tasks/{task_id}` - Query task status and result URL
+- `POST /api/v1/tasks/{task_id}/cancel` - Cancel pending task (full refund)
+- `GET /api/v1/account/info` - Query platform account balance
+- `GET /api/v1/models` - List available models with prices
+
+**Billing flow for External API v1**:
+1. Task submit → freeze balance (预扣费)
+2. Task success → confirm deduction, update total_spent
+3. Task failed/cancelled → refund frozen amount
+
+Platform clients are managed via admin panel (`platform.py` router) or `/api/admin/platforms` endpoints.
 
 ## WebSocket Protocol
 
@@ -210,3 +239,22 @@ COS service in `backend/services/cos_service.py` handles:
 - Signed URLs for result access
 
 Configure via `plugin_storage_buckets` table. If no default bucket configured, falls back to local `/uploads` directory.
+
+## Platform Client System
+
+External platforms (e.g., Hi-Tom-AI) can consume the API as "platform clients":
+
+1. Admin creates platform client via `/api/admin/platforms` → generates `client_id` and `api_key` (format: `sk_xxx`)
+2. Platform calls `/api/v1/*` endpoints with `X-API-Key` header
+3. Each task submission freezes balance; success confirms deduction; failure/cancel refunds
+4. Admin can recharge platform balance, view transactions/call logs
+
+Key components:
+- `PlatformClient` model - balance tracking, status, IP whitelist
+- `BillingService` - freeze_balance, confirm_deduction, refund_frozen, recharge
+- `APIKeyAuth` middleware - validates X-API-Key header, checks account status/IP whitelist
+- Integration docs: `docs/hi-tom-ai-integration.md`
+
+## Testing
+
+No test framework is configured. There are no tests in this project.

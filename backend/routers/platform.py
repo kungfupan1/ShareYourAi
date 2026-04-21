@@ -28,7 +28,7 @@ from utils import generate_client_id, generate_api_key
 router = APIRouter(prefix="/api/admin/platforms", tags=["平台客户管理"])
 
 
-@router.get("", response_model=List[PlatformClientResponse])
+@router.get("")
 async def list_platforms(
     user_id: int,
     page: int = 1,
@@ -56,7 +56,10 @@ async def list_platforms(
     for client in clients:
         client.api_key = mask_api_key(client.api_key)
 
-    return clients
+    return {
+        "data": clients,
+        "total": total
+    }
 
 
 @router.post("", response_model=MessageResponse)
